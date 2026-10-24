@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Granja Lunar // GalaxyGens</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<link rel="preload" as="image" href="lobby.webp" type="image/webp" fetchpriority="high">
+<link rel="stylesheet" href="galaxy.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+<script src="galaxy.js"></script>
+<script>
+let FARM = null, timers = [], pending = new Set(), sendTimer = null, down = false, last = null, fullToast = 0;
+const KEYS = [['comun','Común','#94a3b8'],['basico','Básica','#10b981'],['especial','Especial','#3b82f6'],['raro','Rara','#a855f7'],['epico','Épica','#ec4899'],['evento','Evento','#ffd23f']];
+
+const UP = {
+  xp_seeker:{ ico:'🧬', name:'Buscador de XP',     desc: f => `+${((f.xp_seeker_level || 0) * 0.15).toFixed(2)} XP extra por planta (${(f.xp_per_harvest || 1).toFixed(2)} XP total)` },
+  fortune:  { ico:'🍀', name:'Fortuna',            desc: f => `Hongo: ${f.hongo_value} CR · Cristal: ${f.cristal_value} CR` },
+  plasma:   { ico:'🔮', name:'Búsqueda de Plasma', desc: f => `+${f.plasma_base} PL base por cultivo` },
+  keys:     { ico:'🗝️', name:'Buscador de Llaves', desc: f => f.keys_level < 1 ? 'Compra el nivel 1 para encontrar llaves' :
+             `Llave: ${f.key_chance_pct}% por cultivo<br><small>${KEYS.filter(k => f.key_odds[k[0]] >= 0.1).map(k => k[1] + ' ' + f.key_odds[k[0]] + '%').join(' · ')}</small>` },
+  autosell: { ico:'💱', name:'Auto-Venta',         desc: f => f.autosell ? 'ACTIVA: venta instantánea' : 'Venta automática sin límite de cesta' },
+  cap:      { ico:'🎒', name:'Capacidad de Cesta', desc: f => `Capacidad: ${f.capacity} ítems` }
+};
+
+startPage({active:'granja.html', needPlanet:true}).then(() => { buildGrid(); sync(); setInterval(sync, 6000); setInterval(tickTimers, 250); setupSwipe(); });
+
+$('view').innerHTML = `
+  <div class="farm-header">
+    <h2 class="sec-title px" style="margin:0">🌱 GRANJA LUNAR</h2>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn alt sm" onclick="openUpgrades()">⚙️ Mejoras</button>
+      <button class="btn sm" onclick="openPrestige()" style="background:#8b5cf6;color:#fff">✨ Prestigio</button>
+      <button class="btn ok sm" id="btnSell" onclick="sellHarvest()">💰 Vender</button>
+    </div>
+  </div>
+
+  <div class="farm-stats-bar">
+    <div class="xp-wrapper">
+      <div class="bar-meta"><span style="color:var(--g)">⛏️ NIVEL DEL PICO: <b id="txtLevel">1</b></span>
+        <span style="color:var(--m)"><span id="txtXpCur">0</span> / <span id="txtXpNeed">50</span> XP</span></div>
+      <div class="progress-track"><div class="progress-fill xp" id="fillXp" style="width:0%"></div></div>
+    </div>
+    <div class="cap-wrapper" id="capBox">
+      <div class="bar-meta"><span style="color:var(--gold)">CESTA / INVENTARIO:</span><span id="txtCap" style="color:#fff">0 / 50</span></div>
+      <div class="progress-track"><div class="progress-fill cap" id="fillCap" style="width:0%"></div></div>
+    </div>
+  </div>
+
+  <div class="notice" id="warnFull" style="margin:0 0 10px;font-size:9px;display:none;background:rgba(255,107,139,.15);border-color:var(--bad);color:var(--bad)">
+    ⚠️ <b>¡CESTA LLENA!</b> Vende tu cosecha o compra <b>Auto-Venta</b> para seguir recolectando.</div>
+
+  <div class="keys-strip" id="keysStrip"></div>
+  <div class="farm-grid" id="plotGrid"></div>
+  <div class="gain-line" id="gainLine">Desliza el dedo sobre las parcelas listas 🍄</div>
+
+  <div class="box" id="invBox" style="text-align:left;padding:14px">
+    <h3 class="px" style="font-size:10px;color:var(--g);margin:0 0 10px">🎒 CESTA DE COSECHA</h3>
+    <div id="farmInv" style="font-size:12px;color:var(--m)"></div>
+  </div>
+
+  <div class="modal" id="modalUp" hidden onclick="if(event.target===this)this.hidden=true">
+    <div class="modal-box" style="max-width:520px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <h3 class="px" style="margin:0;color:var(--gold)">🛠️ MEJORAS (EN PLASMA)</h3>
+        <button class="btn-exit" onclick="$('modalUp').hidden=true">✕</button></div>
+      <div class="upgrades-list" id="upList"></div>
+      <button class="btn alt" onclick="$('modalUp').hidden=true">Cerrar</button>
+    </div>
+  </div>
+
+  <div class="modal" id="modalPr" hidden onclick="if(event.target===this)this.hidden=true">
+    <div class="modal-box">
+      <h3 class="px" style="color:#a78bfa;margin-bottom:10px">✨ PRESTIGIO DEL PICO</h3>
+      <p style="font-size:12px;color:var(--m);line-height:1.6">Cada prestigio suma <b>+0.0005%</b> permanente a todas las ganancias (CR, PL y XP). Requiere subir el pico de 25 en 25 niveles.</p>
+      <div class="line"><span>Prestigios actuales</span><b id="prCount" style="color:var(--gold)">0</b></div>
+      <div class="line"><span>Bonus acumulado</span><b id="prBonus" style="color:var(--ok)">+0%</b></div>
+      <div class="line"><span>Nivel actual del pico</span><b id="prHoeCur" style="color:var(--g)">Nv.1</b></div>
+      <div class="line"><span>Nivel requerido</span><b id="prHoeReq" style="color:var(--bad)">Nv.25</b></div>
+      <div class="notice" style="font-size:9.5px">💡 Al prestigiar se reinicia tu nivel de pico a Nivel 1. Conservas todas tus mejoras.</div>
+      <button class="btn" id="btnDoPrestige" style="margin-top:14px;background:#8b5cf6;color:#fff" onclick="doPrestige()">Prestigiar Ahora</button>
+      <button class="btn alt" style="margin-top:8px" onclick="$('modalPr').hidden=true">Regresar</button>
+    </div>
+  </div>`;
+
+function buildGrid(){
+  $('plotGrid').innerHTML = Array.from({length:30}, (_, i) =>
+    `<div class="farm-plot" id="plot-${i}" data-idx="${i}"><span class="icon">🌱</span><span class="timer">...</span></div>`).join('');
+}
+
+async function sync(){
+  if (document.hidden) return;
+  const { data } = await db.rpc('galaxy_farm_get', { p_user_id: me.id });
+  if (!data || !data.success) return;
+  applyFarm(data.farm); applyState(Object.assign({}, state, { user: data.user }));
+}
+
+function applyFarm(f){
+  FARM = f;
+  const now = Date.now();
+  f.plots.forEach((s, i) => { if (!pending.has(i)) timers[i] = now + s * 1000; });
+  renderFarm();
+}
+
+function renderFarm(){
+  const f = FARM;
+  $('txtLevel').textContent = f.farm_level;
+  $('txtXpCur').textContent = fmt(Math.floor(f.xp)); $('txtXpNeed').textContent = fmt(f.xp_needed);
+  $('fillXp').style.width = Math.min(100, Math.floor(f.xp / f.xp_needed * 100)) + '%';
+
+  $('capBox').style.display = $('invBox').style.display = $('btnSell').style.display = f.autosell ? 'none' : '';
+  if (!f.autosell) {
+    $('txtCap').textContent = `${fmt(f.inv_count)} / ${fmt(f.capacity)}`;
+    const full = f.inv_count >= f.capacity;
+    $('fillCap').style.width = Math.min(100, Math.floor(f.inv_count / f.capacity * 100)) + '%';
+    $('fillCap').className = 'progress-fill cap' + (full ? ' full' : '');
+    $('warnFull').style.display = full ? 'block' : 'none';
+    $('btnSell').textContent = `💰 Vender · +${fmt(f.inventory_total)} CR`;
+    $('btnSell').disabled = f.inventory_total <= 0;
+    $('farmInv').innerHTML = f.inventory.length ? f.inventory.map(i =>
+      `<div class="line"><span>${i.item === 'cristal' ? '💎' : '🍄'} <b>${esc(i.name)}</b> (${i.value} CR c/u)</span><b style="color:var(--gold)">x${fmt(i.qty)}</b></div>`).join('')
+      : 'La cesta está vacía. Desliza el dedo sobre las parcelas listas.';
+  } else {
+    $('warnFull').style.display = 'none';
+  }
+
+  $('keysStrip').innerHTML = KEYS.map(k => `<span class="key-chip" style="border-color:${k[2]};color:${k[2]}">🗝️ ${k[1]} <b>${fmt(f.keys[k[0]])}</b></span>`).join('');
+  if (!$('modalUp').hidden) renderUpgrades();
+}
+
+function tickTimers(){
+  const now = Date.now();
+  timers.forEach((t, i) => {
+    const el = $('plot-' + i); if (!el) return;
+    const diff = Math.max(0, Math.ceil((t - now) / 1000));
+    if (diff <= 0) { el.className = 'farm-plot ready'; el.firstChild.textContent = '🍄'; el.lastChild.textContent = 'LISTO'; }
+    else { el.className = 'farm-plot growing'; el.firstChild.textContent = '🌱'; el.lastChild.textContent = diff + 's'; }
+  });
+}
+
+function setupSwipe(){
+  const g = $('plotGrid');
+  g.addEventListener('pointerdown', e => { down = true; last = [e.clientX, e.clientY]; hit(e.clientX, e.clientY); });
+  g.addEventListener('pointermove', e => {
+    if (!down) return;
+    const [x0, y0] = last, dx = e.clientX - x0, dy = e.clientY - y0, steps = Math.max(1, Math.ceil(Math.hypot(dx, dy) / 14));
+    for (let s = 1; s <= steps; s++) hit(x0 + dx * s / steps, y0 + dy * s / steps);
+    last = [e.clientX, e.clientY];
+  });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => g.addEventListener(ev, () => { down = false; }));
+}
+
+function hit(x, y){
+  const el = document.elementFromPoint(x, y), p = el && el.closest('.farm-plot');
+  if (p) harvestPlot(+p.dataset.idx, p);
+}
+
+function harvestPlot(i, el){
+  if (!FARM || timers[i] > Date.now() || pending.has(i)) return;
+  if (!FARM.autosell && FARM.inv_count >= FARM.capacity) {
+    if (Date.now() - fullToast > 2000) { fullToast = Date.now(); toast('⚠️ ¡Cesta llena! Vende tu cosecha.'); }
+    return;
+  }
+  timers[i] = Date.now() + 2000;
+  el.className = 'farm-plot swiped'; el.firstChild.textContent = '✨'; el.lastChild.textContent = '⏳';
+  pending.add(i);
+  clearTimeout(sendTimer); sendTimer = setTimeout(sendBatch, 150);
+}
+
+async function sendBatch(){
+  if (!pending.size) return;
+  const list = [...pending]; pending.clear();
+  const { data } = await db.rpc('galaxy_farm_harvest', { p_user_id: me.id, p_plots: list });
+  if (!data || !data.success) return sync();
+  applyFarm(data.farm); applyState(Object.assign({}, state, { user: data.user }));
+  const g = data.gains, parts = [];
+  if (data.harvested) {
+    parts.push(`+${fmt(g.xp)} XP`);
+    if (Number(g.money) > 0) parts.push(`+${fmt(g.money)} CR`);
+    parts.push(`+${fmt(g.plasma)} PL`);
+    KEYS.forEach(k => { if (g.keys[k[0]] > 0) parts.push(`🗝️ ${k[1]} ×${g.keys[k[0]]}`); });
+    $('gainLine').textContent = parts.join(' · ');
+  }
+  if (g.leveled) toast(`⭐ ¡EL PICO SUBIÓ A NIVEL ${data.farm.farm_level}!`);
+}
+
+async function sellHarvest(){
+  const { data } = await db.rpc('galaxy_farm_sell', { p_user_id: me.id });
+  if (!data || !data.success) return toast('❌ ' + (data ? data.msg : 'Error'));
+  toast(`💰 Cosecha vendida: +${fmt(data.total)} CR`);
+  applyFarm(data.farm); applyState(Object.assign({}, state, { user: data.user }));
+}
+
+function openUpgrades(){ renderUpgrades(); $('modalUp').hidden = false; }
+
+function renderUpgrades(){
+  const pl = Number(me.plasma || 0);
+  $('upList').innerHTML = FARM.upgrades.filter(u => !(u.kind === 'cap' && FARM.autosell)).map(u => {
+    const d = UP[u.kind], maxed = u.level >= u.max, afford = u.cost !== null && pl >= u.cost, many = u.max > 5;
+    const lv = u.kind === 'autosell' ? '' : ` (Nv.${fmt(u.level)}${u.max > 1 ? ' / ' + fmt(u.max) : ''})`;
+    const btn = maxed ? '<button class="btn sm" disabled>MAX</button>'
+      : many ? `<div class="buy-row">${[[1,'x1'],[10,'x10'],[100,'x100'],[0,'MAX']].map(q =>
+            `<button class="btn ok sm" ${afford ? '' : 'disabled'} onclick="buy('${u.kind}',${q[0]})">${q[1]}</button>`).join('')}</div>
+          <div class="cost">Siguiente: ${fmt(u.cost)} PL</div>`
+      : `<button class="btn ok sm" ${afford ? '' : 'disabled'} onclick="buy('${u.kind}',1)">${fmt(u.cost)} PL</button>`;
+    return `<div class="upgrade-item"><div><h4>${d.ico} ${d.name}${lv}</h4><p>${d.desc(FARM)}</p></div><div style="text-align:right">${btn}</div></div>`;
+  }).join('');
+}
+
+async function buy(kind, qty){
+  const { data } = await db.rpc('galaxy_farm_buy', { p_user_id: me.id, p_kind: kind, p_qty: qty });
+  if (!data || !data.success) return toast('❌ ' + (data ? data.msg : 'Error de conexión'));
+  toast(`✅ ${UP[kind].name}: +${data.bought} nivel${data.bought > 1 ? 'es' : ''} (−${fmt(data.spent)} PL)`);
+  applyFarm(data.farm); applyState(Object.assign({}, state, { user: data.user })); renderUpgrades();
+}
+
+function openPrestige(){
+  if (!FARM) return;
+  const req = (FARM.prestiges + 1) * 25;
+  $('prCount').textContent = FARM.prestiges;
+  $('prBonus').textContent = '+' + (FARM.prestiges * 0.0005).toFixed(4) + '%';
+  $('prHoeCur').textContent = 'Nv.' + FARM.farm_level;
+  $('prHoeReq').textContent = 'Nv.' + req;
+  $('btnDoPrestige').disabled = FARM.farm_level < req;
+  $('modalPr').hidden = false;
+}
+
+async function doPrestige(){
+  const { data } = await db.rpc('galaxy_farm_prestige', { p_user_id: me.id });
+  if (!data || !data.success) return toast('❌ ' + (data ? data.msg : 'Error'));
+  toast('✨ ¡PRESTIGIO OBTENIDO! +0.0005% a todas tus ganancias');
+  applyFarm(data.farm); applyState(Object.assign({}, state, { user: data.user }));
+  openPrestige();
+}
+</script>
+</body>
+</html>

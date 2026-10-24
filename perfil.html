@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mi Perfil // GalaxyGens</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<link rel="preload" as="image" href="lobby.webp" type="image/webp" fetchpriority="high">
+<link rel="stylesheet" href="galaxy.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+.avatar{width:140px;height:140px;border-radius:50%;border:3px solid var(--g);box-shadow:0 0 25px rgba(0,242,254,.35);margin:0 auto 14px;background:#060a1a center/cover no-repeat;display:flex;align-items:center;justify-content:center;font-size:56px;cursor:pointer;position:relative;overflow:hidden}
+.avatar:hover::after{content:'📷';position:absolute;inset:0;background:#000a;display:flex;align-items:center;justify-content:center;font-size:36px}
+.coins{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:18px 0}
+.coin{background:#090f24;border:2px solid var(--p2);border-radius:6px;padding:12px 6px}
+.coin b{display:block;font:12px 'Press Start 2P',monospace;margin-bottom:6px}.coin span{font-size:11px;color:var(--m)}
+.timebox{background:rgba(0,242,254,.08);border:2px solid var(--g);border-radius:8px;padding:16px;margin-top:6px}
+.timebox .t{font:clamp(14px,4vw,22px) 'Press Start 2P',monospace;color:var(--g);margin:8px 0}
+@media(max-width:600px){.coins{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<script src="galaxy.js"></script>
+<script>
+startPage({active:'perfil.html', needPlanet:true}).then(() => { load(); setInterval(load, 10000); setInterval(tick, 1000); tick(); });
+$('view').innerHTML = `<div class="box"><div class="avatar" id="avatar" title="Cambiar foto" onclick="$('file').click()">👤</div>
+  <input type="file" id="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onchange="pickFile(this)">
+  <div style="display:flex;gap:8px;justify-content:center;margin-bottom:12px"><button class="btn sm alt" onclick="$('file').click()">📷 Cambiar foto</button>
+    <button class="btn sm bad" id="rmBtn" onclick="removePhoto()" hidden>Quitar</button></div>
+  <h2 class="px" id="pName" style="font-size:15px;color:var(--gold);margin:0 0 4px"></h2>
+  <div id="pSub" style="color:var(--m);font-size:12px"></div>
+  <div class="coins" id="coins"></div>
+  <div class="timebox"><div class="px" style="font-size:9px;color:var(--m)">⏱ TIEMPO EN EL JUEGO</div><div class="t" id="pTime">0h 00m 00s</div>
+    <div style="font-size:11px;color:var(--m)">Solo cuenta mientras tienes el juego abierto y activo en el navegador</div></div></div>`;
+
+async function load(){
+  const { data } = await db.rpc('galaxy_get_profile', { p_user_id: me.id });
+  if (!data || !data.success) return;
+  const u = data.user;
+  syncPlay(u.online_seconds);
+  $('pName').textContent = u.username;
+  $('pSub').textContent = data.planet_name ? `🪐 ${data.planet_name} · ${data.is_owner ? 'Comandante' : 'Aliado'} · Planeta #${data.planet_rank}` : 'Sin planeta';
+  $('coins').innerHTML = [['CR','credits','var(--gold)','Créditos'],['PL','plasma','var(--plasma)','Plasma'],['EC','quantum','var(--quantum)','Cuántica'],['NS','supernova','#fff','Supernova']]
+    .map(c => `<div class="coin"><b style="color:${c[2]}">${fmt(u[c[1]])}</b><span>${c[3]} (${c[0]})</span></div>`).join('');
+  const av = $('avatar');
+  if (data.avatar && data.avatar.startsWith('data:image/jpeg;base64,')) { av.style.backgroundImage = `url("${data.avatar}")`; av.textContent = ''; $('rmBtn').hidden = false; }
+  else { av.style.backgroundImage = ''; av.textContent = '👤'; $('rmBtn').hidden = true; }
+  tick();
+}
+function tick(){
+  const t = getPlay(), h = Math.floor(t/3600), m = Math.floor(t%3600/60), s = t%60;
+  $('pTime').textContent = `${h}h ${String(m).padStart(2,'0')}m ${String(s).padStart(2,'0')}s`;
+}
+
+// ---- FOTO: solo imágenes reales (firma de archivo) -> se redibuja y se recodifica a JPEG 256x256
+async function pickFile(inp){
+  const f = inp.files[0]; inp.value = ''; if (!f) return;
+  if (f.size > 5*1024*1024) return toast('❌ Máximo 5 MB');
+  const b = new Uint8Array(await f.slice(0, 12).arrayBuffer());
+  const ok = (b[0]===0xFF&&b[1]===0xD8&&b[2]===0xFF) || (b[0]===0x89&&b[1]===0x50&&b[2]===0x4E&&b[3]===0x47) ||
+             (b[0]===0x47&&b[1]===0x49&&b[2]===0x46&&b[3]===0x38) || (b[0]===0x52&&b[1]===0x49&&b[2]===0x46&&b[3]===0x46&&b[8]===0x57&&b[9]===0x45&&b[10]===0x42&&b[11]===0x50);
+  if (!ok) return toast('❌ Solo se permiten fotos (JPG, PNG, WEBP, GIF)');
+  let bmp; try { bmp = await createImageBitmap(f); } catch (e) { return toast('❌ La imagen no es válida'); }
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const s = Math.min(bmp.width, bmp.height), x = c.getContext('2d');
+  x.fillStyle = '#060a1a'; x.fillRect(0, 0, 256, 256);
+  x.drawImage(bmp, (bmp.width-s)/2, (bmp.height-s)/2, s, s, 0, 0, 256, 256);
+  save(c.toDataURL('image/jpeg', 0.85));
+}
+async function save(d){
+  const { data } = await db.rpc('galaxy_set_avatar', { p_user_id: me.id, p_data: d });
+  if (!data || !data.success) return toast('❌ ' + (data ? data.msg : 'Error de conexión'));
+  toast(d ? '📷 ¡Foto actualizada!' : 'Foto eliminada'); load();
+}
+function removePhoto(){ if (confirm('¿Quitar tu foto de perfil?')) save(null); }
+</script>
+</body>
+</html>

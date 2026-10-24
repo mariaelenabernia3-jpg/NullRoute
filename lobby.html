@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lobby // GalaxyGens</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<link rel="preload" as="image" href="lobby.webp" type="image/webp" fetchpriority="high">
+<link rel="stylesheet" href="galaxy.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+<script src="galaxy.js"></script>
+<script>
+const R=(x,y,w,h,c)=>`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${c}"/>`;
+const S=b=>`<svg viewBox="0 0 16 16" shape-rendering="crispEdges">${b}</svg>`;
+const chestSpr=(c,o)=>S(R(2,5,12,10,c[0])+R(3,6,10,8,c[1])+R(5,7,6,6,c[2])+R(1,7,2,6,c[3])+R(13,7,2,6,c[3])+(o?R(3,5,10,2,'#111')+R(4,2,8,3,c[3])+R(6,1,4,2,'#fff'):R(2,2,12,4,c[0])+R(3,3,10,2,c[1])+R(7,4,2,2,'#ffd23f')));
+const CHESTS=[
+ {n:'Cofre Común',kind:'comun',kn:'Común',c:['#1e293b','#334155','#64748b','#94a3b8']},
+ {n:'Cofre Básico',kind:'basico',kn:'Básica',c:['#064e3b','#047857','#10b981','#34d399']},
+ {n:'Cofre Especial',kind:'especial',kn:'Especial',c:['#1e3a8a','#1d4ed8','#3b82f6','#60a5fa']},
+ {n:'Cofre Raro',kind:'raro',kn:'Rara',c:['#581c87','#7e22ce','#a855f7','#c084fc']},
+ {n:'Cofre Épico',kind:'epico',kn:'Épica',c:['#831843','#be185d','#ec4899','#f472b6']},
+ {n:'Cofre de Evento',kind:'evento',kn:'de Evento',c:['#78350f','#d97706','#ffd23f','#ffffff']}];
+let KEYS = {};
+
+startPage({active:'lobby.html', onState});
+
+$('view').innerHTML = `<div id="planetArea" style="width:100%"></div>
+  <div style="width:100%"><h2 class="sec-title px">📦 CÁPSULAS DE SUMINISTRO</h2><div class="notice" style="width:100%;margin:0 0 14px;font-size:9.5px">🗝️ Cada cofre se abre con <b>1 llave</b> de su tipo. Consíguelas en la <a href="granja.html" style="color:var(--g)">🌱 Granja Lunar</a> con la mejora <b>Buscador de Llaves</b>.</div><div class="row" id="chestGrid"></div></div>`;
+renderChests(); loadKeys(); setInterval(loadKeys, 8000);
+
+let lastKey = null;
+function onState(s){
+  const key = JSON.stringify([s.planet && s.planet.code, s.my_requests]);
+  if (key === lastKey) return;
+  const hadNoPlanet = lastKey !== null && JSON.parse(lastKey)[0] === null;
+  lastKey = key;
+  if (s.planet) {
+    if (hadNoPlanet) toast('🪐 ¡Ya perteneces a un planeta!');
+    $('planetArea').innerHTML = `<div class="box"><div class="box-title px">🪐 ${esc(s.planet.name)}</div>
+      <a class="btn" style="display:block;text-decoration:none" href="planeta.html">Ir a Mi Planeta</a></div>`;
+    return;
+  }
+  const pend = (s.my_requests || []).map(r => `⏳ Solicitud enviada a <b>${esc(r.planet_name)}</b> (${esc(r.code)}). Esperando respuesta del comandante.`).join('<br>');
+  $('planetArea').innerHTML = `<div class="box">
+    <div class="box-title px">📡 NO TIENES PLANETA ASIGNADO</div>
+    <div class="two"><button class="btn" onclick="showPanel('Create')">🪐 Crear Planeta</button>
+      <button class="btn alt" onclick="showPanel('Join')">🚀 Unirme a un Planeta</button></div>
+    <div class="panel" id="panelCreate" hidden><h3 class="px">NOMBRA TU PLANETA</h3>
+      <input class="input" id="newName" maxlength="20" placeholder="Nombre (ej. Kepler-45)">
+      <button class="btn ok" id="btnCreate" onclick="createPlanet()">Aceptar</button></div>
+    <div class="panel" id="panelJoin" hidden><h3 class="px">CÓDIGO DEL PLANETA</h3>
+      <input class="input" id="joinCode" maxlength="12" placeholder="Código (ej. PL-7K9AB)">
+      <button class="btn alt" id="btnJoin" onclick="joinPlanet()">Enviar Solicitud</button></div>
+    ${pend ? `<div class="notice">${pend}</div>` : ''}</div>`;
+}
+function showPanel(w){ $('panelCreate').hidden = w !== 'Create'; $('panelJoin').hidden = w !== 'Join'; }
+
+async function createPlanet(){
+  const btn = $('btnCreate'); btn.disabled = true;
+  const { data, error } = await db.rpc('galaxy_create_planet', { p_user_id: me.id, p_name: $('newName').value });
+  btn.disabled = false;
+  if (error) return toast('Error: ' + error.message);
+  if (!data.success) return toast('❌ ' + data.msg);
+  toast('🪐 ¡Planeta fundado!'); lastKey = null; await refresh(); onState(state);
+}
+async function joinPlanet(){
+  const btn = $('btnJoin'); btn.disabled = true;
+  const { data, error } = await db.rpc('galaxy_request_join', { p_user_id: me.id, p_code: $('joinCode').value });
+  btn.disabled = false;
+  if (error) return toast('Error: ' + error.message);
+  if (!data.success) return toast('❌ ' + data.msg);
+  toast('📨 ' + data.msg); lastKey = null; await refresh(); onState(state);
+}
+
+async function loadKeys(){
+  if (document.hidden) return;
+  const { data } = await db.rpc('galaxy_get_keys', { p_user_id: me.id });
+  if (data && data.success) { KEYS = data.keys; paintKeys(); }
+}
+function paintKeys(){ CHESTS.forEach((c, i) => { const el = $('kq' + i); if (el) { el.textContent = fmt(KEYS[c.kind] || 0); el.parentNode.style.opacity = (KEYS[c.kind] || 0) > 0 ? 1 : .55; } }); }
+function renderChests(){
+  $('chestGrid').innerHTML = CHESTS.map((c,i) => `<div class="card"><div class="chest" data-i="${i}">${chestSpr(c.c,0)}</div>
+    <h3 style="color:${c.c[3]}">${c.n}</h3><p>🗝️ Llave ${c.kn}<br><b style="color:var(--gold)">x<span id="kq${i}">0</span></b></p></div>`).join('');
+  document.querySelectorAll('.chest').forEach(el => el.onclick = () => openChest(el));
+}
+let opening = false;
+async function openChest(el){
+  if (opening) return;
+  const i = +el.dataset.i, c = CHESTS[i];
+  if ((KEYS[c.kind] || 0) < 1) return toast(`🗝️ Necesitas una Llave ${c.kn}`);
+  opening = true; el.classList.add('shake');
+  const { data, error } = await db.rpc('galaxy_open_chest', { p_user_id: me.id, p_chest: i });
+  await new Promise(r => setTimeout(r, 500));
+  if (error || !data || !data.success) { opening = false; el.classList.remove('shake'); return toast('❌ ' + (data ? data.msg : 'Error de conexión')); }
+  el.innerHTML = chestSpr(c.c, 1);
+  KEYS = data.keys; paintKeys();
+  applyState(Object.assign({}, state, { user: data.user }));
+  const r = data.reward, parts = [];
+  if (r.cr) parts.push('+' + fmt(r.cr) + ' CR'); if (r.pl) parts.push('+' + r.pl + ' PL');
+  if (r.ec) parts.push('+' + r.ec + ' EC'); if (r.ns) parts.push('¡+' + r.ns + ' Supernova!');
+  toast(`📦 ${c.n}: ${parts.join(' ')}`);
+  setTimeout(() => { el.classList.remove('shake'); el.innerHTML = chestSpr(c.c, 0); opening = false; }, 1200);
+}
+</script>
+</body>
+</html>

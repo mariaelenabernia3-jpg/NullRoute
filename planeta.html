@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mi Planeta // GalaxyGens</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<link rel="preload" as="image" href="lobby.webp" type="image/webp" fetchpriority="high">
+<link rel="stylesheet" href="galaxy.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+<script src="galaxy.js"></script>
+<script>
+startPage({active:'planeta.html', needPlanet:true, onState});
+$('view').innerHTML = '<div class="box" id="planetView"><div class="px" style="font-size:10px">Sincronizando coordenadas...</div></div>';
+let last = null;
+function onState(s){
+  const p = s.planet, sig = JSON.stringify(p);
+  if (sig === last) return; last = sig;
+  const members = p.members || [];
+  $('planetView').innerHTML = `
+    ${!p.is_owner ? `<div class="px" style="font-size:10px;color:var(--g);margin-bottom:8px">🚀 Bienvenido al planeta de ${esc(p.owner_name)}</div>` : ''}
+    <div class="planet-name px">🪐 ${esc(p.name)}</div>
+    <div class="code-container">CÓDIGO DE SECTOR: <b class="code-value">${esc(p.code)}</b></div>
+    <div><button class="btn sm" style="background:var(--p2);color:var(--g);border:1px solid var(--g)" onclick="copyCode('${esc(p.code)}')">📋 Copiar Código</button></div>
+    <div class="rank-banner px">🏆 RANGO DEL PLANETA MÁS RICO: <b>#${p.rank} de ${p.total_planets}</b><br>
+      <span style="font-size:9.5px;color:#fff">Riqueza combinada: <b>${fmt(p.wealth)} CR</b></span></div>
+    <div class="grid2">
+      <div class="stat-card"><h4>💰 RIQUEZA TOTAL</h4><div class="val">${fmt(p.wealth)} CR</div><div class="sub">Suma de los créditos de toda la tripulación</div></div>
+      <div class="stat-card"><h4>👥 TRIPULACIÓN</h4><div class="val">${members.length} Pilotos</div><div class="sub">Comandante y aliados</div></div>
+    </div>
+    <div class="stat-card"><h4>MIEMBROS DEL SECTOR</h4>
+      ${members.map(m => `<div class="line"><span>${m.is_owner ? '★' : '•'} ${esc(m.username)}</span><span style="color:${m.is_owner ? 'var(--gold)' : 'var(--g)'}">${m.is_owner ? 'Líder' : 'Aliado'}</span></div>`).join('')}</div>
+    <div style="margin-top:16px;max-width:320px;margin-inline:auto">
+      ${p.is_owner ? `<button class="btn bad" onclick="dissolve()">💥 Disolver Planeta</button>` : `<button class="btn leave" onclick="leave()">🚪 Abandonar Planeta</button>`}</div>`;
+}
+function copyCode(c){ navigator.clipboard.writeText(c).then(() => toast('📋 ¡Código copiado!')); }
+async function dissolve(){
+  if (!confirm('¿Seguro que deseas disolver tu planeta? Todos los miembros serán expulsados.')) return;
+  const { data } = await db.rpc('galaxy_dissolve_planet', { p_user_id: me.id });
+  if (!data || !data.success) return toast('❌ ' + (data ? data.msg : 'Error'));
+  toast('💥 Planeta disuelto'); setTimeout(() => location.href = 'lobby.html', 800);
+}
+async function leave(){
+  if (!confirm('¿Deseas abandonar este planeta?')) return;
+  const { data } = await db.rpc('galaxy_leave_planet', { p_user_id: me.id });
+  if (!data || !data.success) return toast('❌ ' + (data ? data.msg : 'Error'));
+  toast('🚪 Has abandonado el planeta'); setTimeout(() => location.href = 'lobby.html', 800);
+}
+</script>
+</body>
+</html>

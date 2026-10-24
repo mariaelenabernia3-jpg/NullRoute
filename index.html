@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>GalaxyGens // Guía Oficial del Sector</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<link rel="preload" as="image" href="lobby.webp" type="image/webp" fetchpriority="high">
+<style>
+:root{
+  color-scheme:dark;--bg:#050713;--p:rgba(14, 19, 41, 0.94);--p2:#182042;
+  --g:#00f2fe;--gd:#4facfe;--t:#e8eeff;--m:#8ca0d1;
+  --gold:#ffd23f;--plasma:#d946ef;--quantum:#00f2fe;--supernova:#ffffff;
+  --danger:#ff4d4d;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--bg);color:var(--t);font:14px/1.6 system-ui,sans-serif;
+  min-height:100vh;
+  background:linear-gradient(rgba(5, 7, 19, 0.82), rgba(5, 7, 19, 0.92)),url('lobby.webp') center/cover fixed no-repeat,#050713;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,.px{font-family:'Press Start 2P',monospace,sans-serif;line-height:1.5;overflow-wrap:break-word}
+svg{image-rendering:pixelated;display:block}
+.top{display:flex;justify-content:space-between;align-items:center;padding:12px 18px;background:#090d1fee;border-bottom:2px solid var(--gd);position:sticky;top:0;z-index:20;backdrop-filter:blur(8px);gap:10px;flex-wrap:wrap}
+.logo{display:flex;gap:8px;align-items:center;color:var(--g);text-decoration:none;font-size:12px}
+.logo svg{width:24px}
+.btn{font:9.5px 'Press Start 2P',monospace;background:var(--g);color:#030b1e;border:0;padding:10px 14px;cursor:pointer;box-shadow:inset -3px -3px #0007,inset 3px 3px #fff8;text-decoration:none;display:inline-block;transition:all .15s;text-align:center}
+.btn:hover{filter:brightness(1.2)}
+.btn.o{background:var(--p2);color:var(--t)}
+.btn.accent{background:var(--gold);color:#030b1e}
+.btn.danger{background:var(--danger);color:#fff}
+.nav-profile{display:none;align-items:center;gap:12px;font-family:'Press Start 2P',monospace;font-size:9px}
+.badge-user{background:#090f24;border:1px solid var(--g);padding:8px 12px;border-radius:4px;color:var(--g);display:flex;align-items:center;gap:8px}
+.badge-cr{color:var(--gold)}
+.wrap{max-width:980px;margin:0 auto;padding:20px 14px 60px}
+.hero{text-align:center;padding:35px 0 24px}
+.hero-badge{display:inline-block;padding:5px 12px;background:rgba(0,242,254,0.15);border:1px solid var(--g);color:var(--g);font-size:9px;font-family:'Press Start 2P',monospace;margin-bottom:14px;border-radius:4px}
+.hero h1{font-size:clamp(18px, 4.5vw, 30px);color:var(--g);text-shadow:3px 3px #000, 0 0 18px rgba(0,242,254,0.4);margin-bottom:14px}
+.hero p{color:var(--m);max-width:680px;margin:12px auto 22px;font-size:13px}
+.hero-btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+h2{font-size:clamp(11px, 3.2vw, 13.5px);color:var(--g);margin:40px 0 14px;text-shadow:0 0 10px rgba(0,242,254,0.3)}
+.feature-box{background:var(--p);border:2px solid var(--p2);border-radius:6px;padding:18px 16px;margin-bottom:20px;backdrop-filter:blur(4px)}
+.feature-box.highlight{border-color:var(--g);box-shadow:0 0 20px rgba(0,242,254,0.15)}
+.feature-box h3{font-size:11px;color:#fff;margin:0 0 10px;display:flex;align-items:center;gap:8px}
+.feature-box p{font-size:12.5px;color:var(--m);margin:6px 0 12px;line-height:1.7}
+.step-list{display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:12px;margin-top:12px}
+.step-item{background:#090f24;border:1px solid var(--p2);padding:12px;border-radius:4px}
+.step-item b{color:var(--gold);font-size:9.5px;display:block;margin-bottom:6px;font-family:'Press Start 2P',monospace}
+.step-item span{font-size:11.5px;color:var(--t)}
+.row{display:grid;grid-template-columns:repeat(auto-fit, minmax(140px, 1fr));gap:12px;margin:16px 0}
+.card{background:var(--p);border:2px solid var(--p2);padding:16px 10px;text-align:center;border-radius:4px;backdrop-filter:blur(4px);display:flex;flex-direction:column;align-items:center;justify-content:center}
+.card h3{font-size:9px;margin:4px 0;line-height:1.4}
+.badge-coin{display:inline-block;padding:3px 6px;font-size:8px;font-family:'Press Start 2P',monospace;border-radius:3px;margin-bottom:8px}
+.b-cr{background:#ffd23f22;color:var(--gold);border:1px solid var(--gold)}
+.b-pl{background:#d946ef22;color:var(--plasma);border:1px solid var(--plasma)}
+.b-ec{background:#00f2fe22;color:var(--quantum);border:1px solid var(--quantum)}
+.b-ns{background:#ffffff22;color:#fff;border:1px solid #fff}
+@media(max-width:640px){
+  .top{padding:10px 12px}.btn{padding:8px 10px;font-size:8.5px}.hero{padding:20px 0 10px}.row{grid-template-columns:1fr 1fr}.step-list{grid-template-columns:1fr}.card{padding:12px 6px}
+}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<div class="top">
+  <a class="logo px" href="index.html">
+    <svg viewBox="0 0 16 16" shape-rendering="crispEdges">
+      <rect x="2" y="2" width="12" height="12" fill="#090d1f"/><rect x="3" y="3" width="10" height="10" fill="#00f2fe"/><rect x="6" y="6" width="4" height="4" fill="#ffffff"/>
+    </svg>
+    GALAXYGENS
+  </a>
+
+  <!-- Opciones cuando NO ha iniciado sesión -->
+  <div id="navGuest" style="display:flex;gap:6px">
+    <a class="btn o" href="login.html">Login</a>
+    <a class="btn" href="register.html">Registro</a>
+  </div>
+
+  <!-- Opciones cuando SI ha iniciado sesión -->
+  <div id="navUser" class="nav-profile">
+    <div class="badge-user">
+      <span>🚀 <span id="playerName">Cargando...</span></span>
+      <span class="badge-cr">💰 <span id="playerCredits">0</span> CR</span>
+    </div>
+    <button class="btn danger" id="btnLogout">Desconectar</button>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="hero">
+    <div class="hero-badge">● SISTEMA GENS OP ESPACIAL EN TIEMPO REAL · V7</div>
+    <h1>SECTOR CÓSMICO GALAXYGENS</h1>
+    <p>Conquista el vacío estelar. Generadores cooperativos, almacén con venta selectiva, granja lunar con prestigios del pico, 4 divisas cósmicas y protección anticlón de naves.</p>
+    
+    <div class="hero-btns" id="heroGuestBtns">
+      <a class="btn accent" href="register.html">Empezar de Cero</a>
+      <a class="btn o" href="login.html">Acceso a mi Nave</a>
+    </div>
+
+    <div class="hero-btns" id="heroUserBtns" style="display:none">
+      <a class="btn accent" href="lobby.html" style="padding:14px 20px">Entrar al Lobby 🚀</a>
+    </div>
+  </div>
+
+  <h2 id="almacen">// 01. EL ALMACÉN Y VENTA SELECTIVA (300 CR)</h2>
+  <div class="feature-box highlight">
+    <h3>🔒 DEPÓSITO COMPARTIDO Y VENTA POR LOTES</h3>
+    <p>Al principio recolectas y vendes a mano en cada reactor. Por <b>300 Créditos</b>, cualquier tripulante puede desbloquear el <b>Almacén</b> para beneficio de toda la colonia.</p>
+    <div class="step-list">
+      <div class="step-item"><b>DEPÓSITO AUTOMÁTICO</b><span>Los generadores encendidos guardan sus drops cada 10 segundos directamente en el inventario de la base.</span></div>
+      <div class="step-item"><b>VENTA SELECTIVA</b><span>Elige vender minerales específicos fila por fila o pulsa <b>VENDER TODO</b> para convertir todas las existencias en Créditos al instante.</span></div>
+      <div class="step-item"><b>PRODUCCIÓN ACTIVA</b><span>Solo producen los generadores de pilotos que estén navegando activamente en <b>Generadores</b> o <b>Almacén</b>.</span></div>
+    </div>
+  </div>
+
+  <h2>// 02. NIVELES DE GENERADORES Y DROPS</h2>
+  <div class="feature-box">
+    <h3>⚛️ ESCALERA DE MEJORA Y GOLPES CRÍTICOS</h3>
+    <p>Cada generador produce 1 ítem cada 10 segundos con un 80% de probabilidad básica y un 20% de golpe crítico especial:</p>
+    <div class="step-list">
+      <div class="step-item">
+        <b>Nv.1 - Extractor Terrestre</b>
+        <span>🪨 Tierra Residual (1 CR) | ✨ Roca Terrestre (5 CR)<br><small style="color:var(--g)">Mejora a Nv.2: 15 CR</small></span>
+      </div>
+      <div class="step-item">
+        <b>Nv.2 - Extractor Lunar</b>
+        <span>🪨 Polvo Basalto (8 CR) | ✨ Meteorito Fósil (17 CR)<br><small style="color:var(--g)">Mejora a Nv.3: 50 CR</small></span>
+      </div>
+      <div class="step-item">
+        <b>Nv.3 - Extractor Magmático</b>
+        <span>🪨 Obsidiana (25 CR) | ✨ Cristal de Azufre (32 CR)<br><small style="color:var(--g)">Mejora a Nv.4: 140 CR</small></span>
+      </div>
+      <div class="step-item">
+        <b>Nv.4 - Extractor de Plasma</b>
+        <span>🪨 Célula Iones (36 CR) | ✨ Plasma Puro (45 CR)<br><small style="color:var(--g)">Mejora a Nv.5: 320 CR</small></span>
+      </div>
+      <div class="step-item">
+        <b>Nv.5 - Singularidad Cuántica</b>
+        <span>🪨 Materia Oscura (55 CR) | ✨ Núcleo Agujero Negro (68 CR)<br><small style="color:var(--gold)">Nivel Máximo (750 CR)</small></span>
+      </div>
+    </div>
+  </div>
+
+  <h2>// 03. PLANETAS COOPERATIVOS (MÁX. 4 AMIGOS)</h2>
+  <div class="feature-box">
+    <p>Empiezas como piloto solitario. Desde el <b>Lobby</b> puedes fundar o unirte a una base planetaria con límite estricto de tripulación:</p>
+    <div class="step-list">
+      <div class="step-item"><b>🪐 LÍMITE DE 4 TRIPULANTES</b><span>Cada planeta admite como máximo a <b>4 amigos</b> (1 Comandante fundador y hasta 3 Aliados). La tripulación no puede ser sobrepoblada.</span></div>
+      <div class="step-item"><b>🚀 CÓDIGO DE SECTOR</b><span>Crea tu mundo y comparte tu código único (ej. PL-7K9AB) con tus aliados para que envíen su solicitud.</span></div>
+      <div class="step-item"><b>✉️ CORREO ESTELAR</b><span>El comandante gestiona las solicitudes pendientes aceptando o rechazando aspirantes desde su panel de mensajes.</span></div>
+      <div class="step-item"><b>👥 GENERADORES COMBINADOS</b><span>Cada piloto aporta sus 5 reactores a la isla compartida. Hasta 20 generadores en simultáneo en un sector completo de 4 integrantes.</span></div>
+    </div>
+  </div>
+
+  <h2>// 04. GRANJA LUNAR, PICO Y PRESTIGIO CÓSMICO</h2>
+  <div class="feature-box highlight">
+    <p>Desliza el dedo o el cursor sobre las parcelas listas para cultivar. Las plantas renacen cada <b>2 segundos</b>. Todas las mejoras de la granja se pagan con <b>Plasma (PL)</b> y escalan en coste con cada nivel comprado.</p>
+    <div class="step-list">
+      <div class="step-item"><b>⛏️ NIVEL DEL PICO / GRANJA</b><span>La experiencia de la granja y la de tu pico son la misma. Cada cultivo otorga experiencia para elevar tu nivel de maestría.</span></div>
+      <div class="step-item"><b>✨ PRESTIGIO (CADA 25 NIVELES)</b><span>Alcanza el <b>Nivel 25</b> de tu pico para desbloquear el primer prestigio; el segundo en el <b>Nivel 50</b>, luego 75, etc. Otorga <b>+0.0005% acumulativo</b> a todas tus ganancias (CR, PL y XP). Al prestigiar se reinicia solo el nivel del pico, conservando intactas todas tus mejoras.</span></div>
+      <div class="step-item"><b>🧬 BUSCADOR DE XP (10.000 NIV.)</b><span>Aumenta exponencialmente la cantidad de XP generada por cada planta que recolectas.</span></div>
+      <div class="step-item"><b>🔮 BÚSQUEDA DE PLASMA (20.000 NIV.)</b><span>Suma Plasma base y probabilidad de bonus en cada cultivo.</span></div>
+      <div class="step-item"><b>🍀 FORTUNA (10 NIV.)</b><span>Eleva el valor en Créditos de los Hongos y Cristales Lunares.</span></div>
+      <div class="step-item"><b>🗝️ BUSCADOR DE LLAVES (25.000 NIV.)</b><span>Otorga probabilidad de obtener llaves para abrir cápsulas de suministros.</span></div>
+      <div class="step-item"><b>💱 AUTO-VENTA DIRECTA</b><span>Elimina la necesidad de cesta y vende tus plantas al milisegundo de cortarlas.</span></div>
+      <div class="step-item"><b>🎒 CESTA EXPANDIBLE</b><span>Aumenta el almacenamiento de tu canasta para vender lotes gigantescos de un solo clic.</span></div>
+    </div>
+  </div>
+
+  <h2>// 05. SEGURIDAD ANTICLÓN DE DISPOSITIVO</h2>
+  <div class="feature-box">
+    <h3>🛡️ UN DISPOSITIVO = UN PILOTO ACTIVO</h3>
+    <p>Para garantizar una competencia justa y evitar trampas en pantallas divididas, navegadores secundarios o modos incógnito:</p>
+    <div class="step-list">
+      <div class="step-item"><b>HUELLA FÍSICA ÚNICA</b><span>Tu terminal es identificado mediante una firma de hardware nativa. No es posible ejecutar dos cuentas simultáneamente en el mismo teléfono o PC.</span></div>
+      <div class="step-item"><b>EXPULSIÓN AUTOMÁTICA</b><span>Si se intenta acceder a una cuenta alterna en el mismo dispositivo, el sector bloqueará el acceso hasta que la sesión previa sea cerrada limpiamente.</span></div>
+    </div>
+  </div>
+
+  <h2>// 06. LAS 4 DIVISAS CÓSMICAS</h2>
+  <div class="row">
+    <div class="card"><span class="badge-coin b-cr">DIVISA</span><h3 style="color:var(--gold)">Créditos (CR)</h3><p style="font-size:10.5px;color:var(--m)">Comercio y reactores</p></div>
+    <div class="card"><span class="badge-coin b-pl">DIVISA</span><h3 style="color:var(--plasma)">Plasma (PL)</h3><p style="font-size:10.5px;color:var(--m)">Mejoras de la granja</p></div>
+    <div class="card"><span class="badge-coin b-ec">DIVISA</span><h3 style="color:var(--quantum)">Cuántica (EC)</h3><p style="font-size:10.5px;color:var(--m)">Tecnología avanzada</p></div>
+    <div class="card"><span class="badge-coin b-ns">DIVISA</span><h3 style="color:#fff">Supernova (NS)</h3><p style="font-size:10.5px;color:var(--m)">Poder primordial</p></div>
+  </div>
+
+  <h2>// 07. CÁPSULAS DE SUMINISTRO</h2>
+  <div class="row">
+    <div class="card"><h3 style="color:#94a3b8">Cofre Común</h3><span style="font-size:11px;color:var(--gold)">1 llave</span></div>
+    <div class="card"><h3 style="color:#10b981">Cofre Básico</h3><span style="font-size:11px;color:var(--gold)">1 llave</span></div>
+    <div class="card"><h3 style="color:#3b82f6">Cofre Especial</h3><span style="font-size:11px;color:var(--gold)">1 llave</span></div>
+    <div class="card"><h3 style="color:#a855f7">Cofre Raro</h3><span style="font-size:11px;color:var(--gold)">1 llave</span></div>
+    <div class="card"><h3 style="color:#ec4899">Cofre Épico</h3><span style="font-size:11px;color:var(--gold)">1 llave</span></div>
+    <div class="card"><h3 style="color:var(--gold)">Cofre de Evento</h3><span style="font-size:11px;color:var(--gold)">1 llave</span></div>
+  </div>
+  <div class="feature-box" style="margin-top:16px">
+    <h3>🎁 RECOMPENSAS EN CÁPSULAS</h3>
+    <p>Las cápsulas espaciales se abren con las llaves extraídas en la Granja Lunar:</p>
+    <div class="step-list">
+      <div class="step-item"><b>CRÉDITOS ESCALADOS</b><span>Premio por defecto con multiplicador de lote en base a la categoría del cofre.</span></div>
+      <div class="step-item"><b>PLASMA PURO (PL)</b><span>Probabilidad de aparición a partir del Cofre Especial.</span></div>
+      <div class="step-item"><b>ENERGÍA CUÁNTICA (EC)</b><span>Exclusiva en cápsulas Épicas y superiores.</span></div>
+      <div class="step-item"><b>SUPERNOVA (NS)</b><span>Recompensa máxima del Cofre de Evento cósmico.</span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://ndsapciemgudjkfefjcf.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_5fsPp1mJiOlYBZ0PpEz5zg_UCs4X8nF';
+const dbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const navGuest = document.getElementById('navGuest');
+const navUser = document.getElementById('navUser');
+const heroGuestBtns = document.getElementById('heroGuestBtns');
+const heroUserBtns = document.getElementById('heroUserBtns');
+const playerName = document.getElementById('playerName');
+const playerCredits = document.getElementById('playerCredits');
+const btnLogout = document.getElementById('btnLogout');
+
+function showUser(u){
+  if (!navGuest || !navUser) return;
+  navGuest.style.display = 'none';
+  heroGuestBtns.style.display = 'none';
+  navUser.style.display = 'flex';
+  heroUserBtns.style.display = 'flex';
+  playerName.textContent = u.username || 'Comandante';
+  playerCredits.textContent = Number(u.credits || 0).toLocaleString();
+}
+
+async function initSession() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem('galaxy_session_user') || 'null'); } catch(e){}
+  if (!saved || !saved.id) return;
+  showUser(saved);
+  const { data: st } = await dbClient.rpc('galaxy_get_state', { p_user_id: saved.id });
+  if (st && st.success) { 
+    saved = Object.assign(saved, st.user); 
+    localStorage.setItem('galaxy_session_user', JSON.stringify(saved)); 
+    showUser(saved); 
+  }
+}
+
+if (btnLogout) {
+  btnLogout.addEventListener('click', () => {
+    localStorage.removeItem('galaxy_session_user');
+    window.location.reload();
+  });
+}
+
+window.addEventListener('DOMContentLoaded', initSession);
+</script>
+
+</body>
+</html>

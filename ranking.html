@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ranking // GalaxyGens</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<link rel="preload" as="image" href="lobby.webp" type="image/webp" fetchpriority="high">
+<link rel="stylesheet" href="galaxy.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+<script src="galaxy.js"></script>
+<script>
+startPage({active:'ranking.html', needPlanet:true}).then(() => { load(); setInterval(load, 5000); });
+$('view').innerHTML = `<div class="wh-head"><h2 class="sec-title px" style="margin:0">🏆 PLANETAS MÁS RICOS</h2>
+  <span class="px" style="font-size:9px;color:var(--ok)">● EN VIVO</span></div>
+  <div class="box" style="text-align:left;padding:12px"><div style="overflow-x:auto" id="rk"><div class="px" style="font-size:10px">Cargando...</div></div></div>
+  <div class="notice" style="width:100%">La riqueza es la suma de los créditos de todos los tripulantes de cada planeta.</div>`;
+let last = null;
+async function load(){
+  if (document.hidden) return;
+  const { data } = await db.rpc('get_planet_leaderboard');
+  if (!data) return;
+  const sig = JSON.stringify(data); if (sig === last) return; last = sig;
+  const mine = state && state.planet && state.planet.code, medal = ['🥇','🥈','🥉'];
+  $('rk').innerHTML = `<table class="wh-table"><tr><th>#</th><th>PLANETA</th><th>COMANDANTE</th><th>PILOTOS</th><th>RIQUEZA</th></tr>
+    ${data.slice(0, 50).map(r => `<tr style="${r.planet_code === mine ? 'background:rgba(0,242,254,.12)' : ''}">
+      <td><b>${medal[r.rank-1] || r.rank}</b></td><td>🪐 ${esc(r.planet_name)}${r.planet_code === mine ? ' <span style="color:var(--g)">(tú)</span>' : ''}</td>
+      <td>${esc(r.owner_name)}</td><td>${r.members}</td><td style="color:var(--gold)"><b>${fmt(r.total_wealth)} CR</b></td></tr>`).join('')}</table>`;
+}
+</script>
+</body>
+</html>

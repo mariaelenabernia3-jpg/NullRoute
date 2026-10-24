@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hangar // GalaxyGens</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<link rel="preload" as="image" href="lobby.webp" type="image/webp" fetchpriority="high">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{color-scheme:dark;--bg:#050713;--p:#0e1329;--p2:#182042;--g:#00f2fe;--gd:#4facfe;--t:#e8eeff;--m:#8ca0d1}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--t);font:15px/1.6 system-ui,sans-serif;min-height:100vh;display:flex;flex-direction:column;background:linear-gradient(rgba(5,7,19,.8),rgba(5,7,19,.9)),url('lobby.webp') center/cover fixed no-repeat,#050713}
+h1,h2,.px{font-family:'Press Start 2P',monospace,sans-serif}
+.top{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;background:#090d1fdd;border-bottom:3px solid var(--gd)}
+.logo{color:var(--g);text-decoration:none;font-size:13px}
+.wrap{max-width:440px;margin:auto;padding:20px;width:100%}
+.card{background:var(--p);border:3px solid var(--p2);padding:24px;box-shadow:0 0 25px rgba(0,242,254,0.15)}
+h2{font-size:14px;color:var(--g);margin:0 0 18px}
+label{display:block;font-size:11px;margin:12px 0 6px;color:var(--m);font-family:'Press Start 2P',monospace}
+input[type="text"], input[type="password"]{width:100%;padding:10px;background:#060817;border:3px solid var(--p2);color:var(--t);font-size:14px}
+input:focus{border-color:var(--g);outline:none}
+.remember-row{display:flex;align-items:center;gap:8px;margin:14px 0 6px;font-size:10px;color:var(--m);font-family:'Press Start 2P',monospace;cursor:pointer;line-height:1.4}
+.remember-row input[type="checkbox"]{width:16px;height:16px;accent-color:var(--g);cursor:pointer}
+.btn{font:11px 'Press Start 2P',monospace;background:var(--g);color:#030b1e;border:0;padding:12px;cursor:pointer;width:100%;margin-top:14px;box-shadow:inset -3px -3px #0007,inset 3px 3px #fff8}
+.btn:hover{filter:brightness(1.2)}.btn:disabled{opacity:.5;cursor:not-allowed}
+.err{color:#ff6b8b;font-size:10px;min-height:20px;margin-top:8px;font-family:'Press Start 2P',monospace;line-height:1.5}
+.small{font-size:12px;color:var(--m);margin-top:16px;text-align:center}
+.small a{color:var(--g);text-decoration:none}
+#quickLogin{display:none;background:#131d3d;border:2px solid var(--g);padding:12px;margin-bottom:16px;text-align:center}
+#quickLogin p{font-size:11px;font-family:'Press Start 2P',monospace;color:#fff;margin:0 0 8px}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <a class="logo px" href="index.html">GALAXYGENS</a>
+  <a href="index.html" style="color:var(--m);font-size:11px;font-family:'Press Start 2P',monospace;text-decoration:none">← Inicio</a>
+</div>
+
+<div class="wrap">
+  <div class="card">
+    <h2 class="px">ACCESO AL HANGAR</h2>
+
+    <div id="quickLogin">
+      <p>Comandante activo:<br><span id="quickUser" style="color:var(--g)"></span></p>
+      <button class="btn" style="margin-top:6px;background:var(--gd)" onclick="enterDirect()">Reanudar Vuelo 🚀</button>
+    </div>
+
+    <form id="f">
+      <label>Comandante</label>
+      <input id="u" type="text" required autocomplete="username" placeholder="Nombre de piloto">
+      
+      <label>Frecuencia de Seguridad</label>
+      <input id="pw" type="password" required autocomplete="current-password" placeholder="••••••••">
+      
+      <label class="remember-row">
+        <input type="checkbox" id="remMe" checked>
+        Recordar mi comandante
+      </label>
+
+      <div class="err" id="e"></div>
+      <button class="btn" id="subBtn">Embarcar</button>
+    </form>
+    
+    <p class="small">¿Nuevo en la flota? <a href="register.html">Alistarse aquí</a></p>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://ndsapciemgudjkfefjcf.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_5fsPp1mJiOlYBZ0PpEz5zg_UCs4X8nF';
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+function getDeviceFingerprint() {
+  try {
+    // Tomamos dimensiones físicas fijas de la pantalla física y características de hardware
+    const screenRes = `${window.screen.availWidth}x${window.screen.availHeight}@${window.devicePixelRatio || 1}`;
+    const cpu = navigator.hardwareConcurrency || 4;
+    const mem = navigator.deviceMemory || 8;
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    const lang = (navigator.languages && navigator.languages[0]) || navigator.language;
+
+    // Obtener el renderizador de la tarjeta gráfica (GPU física del PC/Teléfono)
+    let renderer = 'GPU_GEN';
+    try {
+      const gl = document.createElement('canvas').getContext('webgl');
+      if (gl) {
+        const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+        if (debugInfo) {
+          renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+        }
+      }
+    } catch(e){}
+
+    const raw = [screenRes, cpu, mem, tz, lang, renderer].join('|||');
+
+    let hash = 0;
+    for (let i = 0; i < raw.length; i++) {
+      hash = ((hash << 5) - hash) + raw.charCodeAt(i);
+      hash |= 0;
+    }
+    return 'DEV_' + Math.abs(hash);
+  } catch(err) {
+    return 'DEV_FIXED_MACHINE';
+  }
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  const savedPilot = localStorage.getItem('galaxy_remember_pilot');
+  const activeSession = JSON.parse(localStorage.getItem('galaxy_session_user') || 'null');
+
+  if (activeSession && activeSession.username) {
+    document.getElementById('quickLogin').style.display = 'block';
+    document.getElementById('quickUser').textContent = activeSession.username;
+  }
+
+  if (savedPilot) {
+    document.getElementById('u').value = savedPilot;
+    document.getElementById('remMe').checked = true;
+    document.getElementById('pw').focus();
+  }
+});
+
+function enterDirect() { window.location.href = 'lobby.html'; }
+
+document.getElementById('f').onsubmit = async e => {
+  e.preventDefault();
+  const u = document.getElementById('u').value.trim();
+  const p = document.getElementById('pw').value;
+  const rem = document.getElementById('remMe').checked;
+  const er = document.getElementById('e');
+  const btn = document.getElementById('subBtn');
+
+  er.style.color = '#ff6b8b';
+  er.textContent = 'Verificando con la base estelar...';
+  btn.disabled = true;
+
+  try {
+    const devId = getDeviceFingerprint();
+    const { data, error } = await db.rpc('galaxy_login_device', { 
+      p_username: u, 
+      p_password: p,
+      p_device: devId
+    });
+    btn.disabled = false;
+
+    if (error) { er.textContent = 'Error: ' + error.message; return; }
+    if (!data.success) {
+      er.textContent = data.msg;
+    } else {
+      er.style.color = '#00f2fe';
+      er.textContent = 'Acceso concedido. Entrando al sector...';
+
+      if (rem) localStorage.setItem('galaxy_remember_pilot', u);
+      else localStorage.removeItem('galaxy_remember_pilot');
+
+      localStorage.setItem('galaxy_session_user', JSON.stringify(data.user));
+      setTimeout(() => { window.location.href = 'lobby.html'; }, 500);
+    }
+  } catch (err) {
+    btn.disabled = false;
+    er.textContent = 'Error de conexión.';
+  }
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Correo // GalaxyGens</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<link rel="preload" as="image" href="lobby.webp" type="image/webp" fetchpriority="high">
+<link rel="stylesheet" href="galaxy.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+<script src="galaxy.js"></script>
+<script>
+startPage({active:'correo.html', needPlanet:true, ownerOnly:true, onState: loadMail});
+$('view').innerHTML = '<h2 class="sec-title px">✉️ SOLICITUDES DE INGRESO</h2><div style="width:100%" id="mailList"><div class="px" style="font-size:10px">Cargando...</div></div>';
+let last = null;
+async function loadMail(){
+  const { data } = await db.rpc('galaxy_get_requests', { p_user_id: me.id });
+  if (!data || !data.success) return;
+  const sig = JSON.stringify(data.requests); if (sig === last) return; last = sig;
+  $('mailList').innerHTML = data.requests.length ? data.requests.map(r => `
+    <div class="mail"><div><b class="px" style="font-size:10px;color:var(--g)">${esc(r.username)}</b><br>
+      <span style="font-size:12px;color:var(--m)">quiere unirse a ${esc(data.planet_name)} · ${new Date(r.created_at).toLocaleString()}</span></div>
+      <div class="acts"><button class="btn ok sm" onclick="respond('${r.id}',true)">Aceptar</button>
+      <button class="btn bad sm" onclick="respond('${r.id}',false)">Rechazar</button></div></div>`).join('')
+    : '<div class="box" style="border-color:var(--p2);box-shadow:none"><div class="px" style="font-size:10px;color:var(--m)">📭 No tienes solicitudes pendientes</div></div>';
+}
+async function respond(id, accept){
+  const { data, error } = await db.rpc('galaxy_respond_request', { p_user_id: me.id, p_request_id: id, p_accept: accept });
+  if (error || !data) return toast('Error de conexión');
+  toast((data.success ? (accept ? '✅ ' : '🚫 ') : '❌ ') + data.msg);
+  last = null; await refresh(); loadMail();
+}
+</script>
+</body>
+</html>
