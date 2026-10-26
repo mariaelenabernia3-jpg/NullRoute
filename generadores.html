@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Generadores // GalaxyGens</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<link rel="preload" as="image" href="lobby.webp" type="image/webp" fetchpriority="high">
+<link rel="stylesheet" href="galaxy.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+<script src="galaxy.js"></script>
+<script>
+const ART = [
+  '⛏️', '🌙', '🌋', '⚡', '🕳️', 
+  '☀️', '🌌', '💫', '💥', '🌀', 
+  '💠', '⚛️', '🕸️', '🪐', '🚀', 
+  '⏳', '🌟', '🔮', '🌑', '👑'
+];
+
+const BG = [
+  ['#3b2a1a','#9a6a35'], // Nv 1
+  ['#1e293b','#94a3b8'], // Nv 2
+  ['#7f1d1d','#f97316'], // Nv 3
+  ['#3b0764','#d946ef'], // Nv 4
+  ['#020617','#0e7490'], // Nv 5
+  ['#78350f','#f59e0b'], // Nv 6
+  ['#1e1b4b','#6366f1'], // Nv 7
+  ['#312e81','#818cf8'], // Nv 8
+  ['#831843','#f43f5e'], // Nv 9
+  ['#134e4a','#14b8a6'], // Nv 10
+  ['#0f172a','#38bdf8'], // Nv 11
+  ['#1e3a8a','#3b82f6'], // Nv 12
+  ['#374151','#9ca3af'], // Nv 13
+  ['#713f12','#eab308'], // Nv 14
+  ['#1e293b','#06b6d4'], // Nv 15
+  ['#451a03','#d97706'], // Nv 16
+  ['#4c1d95','#a855f7'], // Nv 17
+  ['#581c87','#c084fc'], // Nv 18
+  ['#09090b','#71717a'], // Nv 19
+  ['#7c2d12','#fbbf24']  // Nv 20
+];
+
+const ORB_RATES = [
+  10, 15, 20, 25, 30, 
+  35, 40, 45, 50, 55, 
+  60, 65, 70, 75, 80, 
+  85, 90, 95, 100, 105
+];
+
+const FLAG = { stop: '⏸ STOP', off: '⏻ APAGADO' };
+let G = null;
+
+startPage({active:'generadores.html', needPlanet:true}).then(() => { 
+  sync(); 
+  setInterval(sync, 3000); 
+  setInterval(tick, 500); 
+});
+
+$('view').innerHTML = `
+  <h2 class="sec-title px">⚛️ GENERADORES DEL PLANETA</h2>
+  <div class="notice" id="whNote" style="width:100%;margin:0 0 14px" hidden></div>
+  <div class="gen-grid" id="genGrid"></div>
+  <div class="modal" id="modal" hidden onclick="if(event.target===this)this.hidden=true">
+    <div class="modal-box" id="modalBox"></div>
+  </div>`;
+
+async function sync(){
+  if (document.hidden) return;
+  const { data } = await db.rpc('galaxy_get_generators', { p_user_id: me.id, p_page: 'generadores' });
+  if (!data || !data.success) return;
+  G = data; 
+  G.t = Date.now();
+  applyState(Object.assign({}, state, { user: data.user }));
+  render();
+}
+
+const cat = l => (G && G.catalog && G.catalog[l-1]) ? G.catalog[l-1] : { name: 'Generador', basic_value: 0, rare_value: 0, upgrade_cost: null };
+
+function render(){
+  $('whNote').hidden = false;
+  $('whNote').innerHTML = G.has_warehouse
+    ? '📦 Almacén activo: generadores depositan solos cada 10 s. <b>Tus generadores te otorgan Orbes (ORB) automáticamente cada 60 s.</b>'
+    : '🔒 Sin almacén: pulsa <b>Vender</b> en cada generador (cooldown de 10 s). Tus generadores acumulan Orbes (ORB) cada 60 s.';
+  
+  // Ordenar: 1º Funcionando ('on' -> 'stop' -> 'off'), 2º Nivel más alto, 3º Los míos primero
+  const statusWeight = { on: 1, stop: 2, off: 3 };
+  const sortedGenerators = [...(G.generators || [])].sort((a, b) => {
+    const sA = statusWeight[a.status] || 99;
+    const sB = statusWeight[b.status] || 99;
+    if (sA !== sB) return sA - sB;
+    if (b.level !== a.level) return b.level - a.level;
+    if (a.is_mine !== b.is_mine) return a.is_mine ? -1 : 1;
+    return a.slot - b.slot;
+  });
+
+  $('genGrid').innerHTML = sortedGenerators.map(g => {
+    const c = cat(g.level);
+    const bg = BG[g.level-1] || ['#1e293b', '#64748b'];
+    const art = ART[g.level-1] || '⚛️';
+    const ready = G.t + g.ready_in * 1000;
+    const mode = G.has_warehouse ? 'auto' : (g.status === 'on' ? 'sell' : 'dead');
+    const orbRate = ORB_RATES[g.level - 1] || 10;
+
+    return `
+      <div class="gen ${g.status}${g.is_mine ? ' mine' : ''}" onclick="info('${g.id}')">
+        <div class="gen-img" style="background:radial-gradient(circle at 50% 40%,${bg[1]},${bg[0]})">
+          <span class="own"><i class="dot ${g.status}"></i>${g.is_mine ? 'TÚ' : esc(g.owner_name)}</span>
+          <span class="lv">Nv.${g.level}</span>
+          ${art}
+          <div class="gen-name">${c.name}</div>
+        </div>
+        ${FLAG[g.status] ? `<div class="gen-flag">${FLAG[g.status]}</div>` : ''}
+        <div class="gen-body">
+          <div class="gen-rows">
+            <span>🪨 ${c.basic_value} CR · 80%</span>
+            <span>✨ ${c.rare_value} CR · 20%</span>
+          </div>
+          <div style="font-size:10px;text-align:center;color:var(--quantum);margin:6px 0;font-weight:bold">
+            🔮 ${g.is_mine ? `+${orbRate} Orbes / 60 s` : 'Orbes de su dueño'}
+          </div>
+          <div class="gen-actions">
+            <button class="btn ok sellbtn" data-id="${g.id}" data-mode="${mode}" data-ready="${ready}" onclick="event.stopPropagation();sell('${g.id}')">Vender</button>
+            ${c.upgrade_cost ? `<button class="btn" onclick="event.stopPropagation();upgrade('${g.id}')">Mejorar · ${fmt(c.upgrade_cost)} CR</button>`
+                             : `<button class="btn" disabled>Nivel MAX</button>`}
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+  tick();
+}
+
+function tick(){
+  document.querySelectorAll('.sellbtn').forEach(b => {
+    const m = b.dataset.mode, left = Math.ceil((+b.dataset.ready - Date.now())/1000);
+    if (m === 'auto') { b.disabled = true; b.textContent = '📦 Auto'; }
+    else if (m === 'dead') { b.disabled = true; b.textContent = 'Apagado'; }
+    else if (left > 0) { b.disabled = true; b.textContent = '⏳ ' + left + 's'; }
+    else { b.disabled = false; b.textContent = 'Vender'; }
+  });
+}
+
+async function sell(id){
+  const { data } = await db.rpc('galaxy_sell_generator_v2', { p_user_id: me.id, p_gen_id: id, p_session_hash: SESSION_HASH });
+  if (!data || !data.success) { toast('❌ ' + (data ? data.msg : 'Error de conexión')); return sync(); }
+  toast(`💰 +${data.value} CR · ${data.item}${data.rare ? ' ✨' : ''}${data.bonus > 0 ? ' · x' + data.multiplier : ''}`); 
+  sync();
+}
+
+async function upgrade(id){
+  const { data, error } = await db.rpc('galaxy_upgrade_generator', { p_user_id: me.id, p_gen_id: id });
+  if (error || !data || !data.success) return toast('❌ ' + (data ? data.msg : (error ? error.message : 'Error de conexión')));
+  toast(`⬆️ ¡Generador a Nv.${data.level}!`); 
+  sync();
+}
+
+function info(id){
+  const g = G.generators.find(x => x.id === id);
+  const c = cat(g.level);
+  const nx = g.level < 20 ? cat(g.level + 1) : null;
+  const st = {on:'🟢 Encendido', stop:'🟡 En pausa', off:'⚫ Apagado'}[g.status];
+  const orbRate = ORB_RATES[g.level - 1] || 10;
+
+  $('modalBox').innerHTML = `<h3 class="px">Nv.${g.level} · ${c.name}</h3>
+    <div class="line"><span>Dueño</span><b>${g.is_mine ? 'Tú' : esc(g.owner_name)}</b></div>
+    <div class="line"><span>Estado</span><span>${st}</span></div>
+    <div class="line"><span>Producción Minerales</span><span>1 ítem cada 10 s</span></div>
+    <div class="line"><span>Producción de Orbes</span><b style="color:var(--quantum)">+${orbRate} ORB cada 60 s</b></div>
+    <div class="line"><span>🪨 ${c.basic_name} (80%)</span><b style="color:var(--gold)">${c.basic_value} CR</b></div>
+    <div class="line"><span>✨ ${c.rare_name} (20%)</span><b style="color:var(--gold)">${c.rare_value} CR</b></div>
+    <div class="line"><span>Siguiente nivel</span><span>${nx && c.upgrade_cost ? nx.name + ' · ' + fmt(c.upgrade_cost) + ' CR' : 'Nivel máximo'}</span></div>
+    <button class="btn alt" style="margin-top:14px" onclick="$('modal').hidden=true">Cerrar</button>`;
+  $('modal').hidden = false;
+}
+</script>
+</body>
+</html>

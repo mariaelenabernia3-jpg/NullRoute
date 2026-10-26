@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Inventario Personal // GalaxyGens</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<link rel="preload" as="image" href="lobby.webp" type="image/webp" fetchpriority="high">
+<link rel="stylesheet" href="galaxy.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+<script src="galaxy.js"></script>
+<script>
+let INV_DATA = null;
+let WANDS = null;
+const WAND_NAME = 'Varita de Venta x1';
+let activeWandId = null;
+
+startPage({active:'inventario.html', needPlanet:false}).then(() => {
+  loadInventory();
+  loadWands();
+  setInterval(loadInventory, 5000);
+  setInterval(loadWands, 7000);
+});
+
+$('view').innerHTML = `
+  <div class="wh-head">
+    <h2 class="sec-title px" style="margin:0">🎒 INVENTARIO PERSONAL</h2>
+  </div>
+  <div class="notice" id="whStatusNotice" style="width:100%;margin-bottom:14px"></div>
+  <div class="box" style="text-align:left;padding:14px" id="invBox">
+    <div class="px" style="font-size:10px;text-align:center">Cargando inventario...</div>
+  </div>
+
+  <div class="wh-head" style="margin-top:18px">
+    <h2 class="sec-title px" style="margin:0">🪄 VARITAS DE VENTA</h2>
+  </div>
+  <div class="notice" id="wandNotice" style="width:100%;margin-bottom:14px;font-size:9.5px">
+    La primera varita activa permanentemente el multiplicador de ventas <b>x1</b>.
+    Las varitas duplicadas no suben el multiplicador y puedes venderlas en el mercado.
+  </div>
+  <div class="box" style="text-align:left;padding:14px" id="wandBox">
+    <div class="px" style="font-size:10px;text-align:center">Cargando varitas...</div>
+  </div>
+
+  <div class="modal" id="modalWand" hidden onclick="if(event.target===this)this.hidden=true">
+    <div class="modal-box" style="max-width:400px">
+      <h3 class="px" style="color:var(--gold);margin-bottom:8px">🪄 PUBLICAR VARITA</h3>
+      <p style="font-size:11px;color:var(--m);line-height:1.5" id="wandDesc"></p>
+      <label class="px" style="font-size:9px;color:var(--g);display:block;margin:10px 0 4px">Precio por unidad:</label>
+      <input type="number" id="wandPrice" class="input" min="0.1" step="any" value="1000">
+      <label class="px" style="font-size:9px;color:var(--g);display:block;margin:4px 0">Moneda:</label>
+      <select id="wandCurrency" class="input">
+        <option value="credits">💰 Créditos (CR)</option>
+        <option value="plasma">🔮 Plasma (PL)</option>
+        <option value="supernova">💥 Supernova (NS)</option>
+      </select>
+      <button class="btn ok" style="margin-top:8px" id="btnWandPub" onclick="confirmWandListing()">Publicar en mi tienda</button>
+      <button class="btn alt" style="margin-top:8px" onclick="$('modalWand').hidden=true">Cancelar</button>
+    </div>
+  </div>`;
+
+async function loadInventory(){
+  if (document.hidden) return;
+  try {
+    const { data } = await db.rpc('galaxy_personal_inventory_get', { p_user_id: me.id });
+    if (!data || !data.success) return;
+    INV_DATA = data;
+    renderInventory();
+  } catch(e) {
+    console.error('Error cargando inventario:', e);
+  }
+}
+
+function renderInventory(){
+  const d = INV_DATA;
+  const n = $('whStatusNotice');
+  if (d.has_warehouse) {
+    n.innerHTML = '📦 <b>Tu planeta tiene Almacén activo:</b> Las compras del mercado van directamente a tu Almacén. Puedes transferir cualquier mineral de aquí a tu colonia.';
+  } else {
+    n.innerHTML = '🔒 <b>Sin Almacén de Colonia:</b> Todos los minerales que compras en el Mercado se guardan de forma segura aquí en tu inventario personal. Puedes venderlos por Créditos.';
+  }
+
+  const items = (d.items || []).filter(i => i.item_name !== WAND_NAME);
+  const box = $('invBox');
+  if (!items.length) {
+    box.innerHTML = '<div class="px" style="font-size:10px;color:var(--m);text-align:center;padding:20px">Tu inventario personal de minerales está vacío.</div>';
+    return;
+  }
+
+  box.innerHTML = `
+    <table class="wh-table">
+      <tr>
+        <th>MINERAL</th>
+        <th>NV.</th>
+        <th>CANTIDAD</th>
+        <th>VALOR TOTAL</th>
+        <th>ACCIONES</th>
+      </tr>
+      ${items.map(i => {
+        const totalVal = i.qty * i.unit_val;
+        return `
+          <tr>
+            <td>${i.rarity === 'rare' ? '✨' : '🪨'} <b>${esc(i.item_name)}</b></td>
+            <td>Nv.${i.level}</td>
+            <td><b>x${fmt(i.qty)}</b></td>
+            <td style="color:var(--gold)">+${fmt(totalVal)} CR</td>
+            <td>
+              <div style="display:flex;gap:6px">
+                <button class="btn ok sm" onclick="sellItem('${i.id}')">Vender</button>
+                ${d.has_warehouse ? `<button class="btn alt sm" onclick="transferItem('${i.id}')">Almacén</button>` : ''}
+              </div>
+            </td>
+          </tr>`;
+      }).join('')}
+    </table>`;
+}
+
+async function loadWands(){
+  if (document.hidden) return;
+  try {
+    const { data } = await db.rpc('galaxy_wand_inventory_get', {
+      p_user_id: me.id,
+      p_session_hash: SESSION_HASH
+    });
+    if (!data || !data.success) return;
+    WANDS = data;
+    me.wand_count = Number(data.count || 0);
+    await syncWandStatus();
+    renderWands();
+  } catch(e) {
+    console.error('Error cargando varitas:', e);
+  }
+}
+
+function renderWands(){
+  const box = $('wandBox');
+  if (!box) return;
+  const items = (WANDS && WANDS.wands) || [];
+  if (!items.length) {
+    box.innerHTML = '<div class="px" style="font-size:10px;color:var(--m);text-align:center;padding:20px">No tienes varitas. El Cofre Básico puede otorgar una.</div>';
+    return;
+  }
+
+  const unlocked = !!me.wand_unlocked;
+  const total = Number(WANDS.count || 0);
+  box.innerHTML = `
+    <table class="wh-table">
+      <tr>
+        <th>OBJETO</th>
+        <th>CANTIDAD</th>
+        <th>MULTIPLICADOR</th>
+        <th>ACCIÓN</th>
+      </tr>
+      ${items.map(i => `
+        <tr>
+          <td>🪄 <b>${esc(i.item_name)}</b></td>
+          <td><b>x${fmt(i.qty)}</b></td>
+          <td style="color:${unlocked ? 'var(--gold)' : 'var(--m)'}">
+            ${unlocked ? '🪄 x1 activo' : 'Sin desbloquear'}
+          </td>
+          <td>
+            <button class="btn ok sm" onclick="openWandModal('${i.id}')">Publicar 1</button>
+          </td>
+        </tr>`).join('')}
+    </table>
+    <div style="font-size:10px;color:var(--m);margin-top:10px">
+      Varitas físicas: <b style="color:#fff">${fmt(total)}</b>.
+      ${total > 1 ? 'Las duplicadas no aumentan el multiplicador; puedes venderlas.' : ''}
+    </div>`;
+}
+
+async function getMyShop(){
+  try {
+    const { data } = await db.rpc('galaxy_market_get_directory', { p_user_id: me.id });
+    if (!data || !data.success) return null;
+    return (data.shops || []).find(s => s.is_my_planet) || null;
+  } catch(e) {
+    return null;
+  }
+}
+
+function openWandModal(id){
+  const w = ((WANDS && WANDS.wands) || []).find(x => x.id === id);
+  if (!w) return;
+  activeWandId = id;
+  $('wandDesc').textContent = `Vas a publicar 1 ${WAND_NAME}. El desbloqueo permanente x1 no se pierde al vender una varita duplicada.`;
+  $('modalWand').hidden = false;
+}
+
+async function confirmWandListing(){
+  if (!activeWandId) return;
+  const price = parseFloat($('wandPrice').value || 0);
+  const currency = $('wandCurrency').value;
+  if (!price || price <= 0) return toast('❌ Ingresa un precio válido');
+
+  const shop = await getMyShop();
+  if (!shop) return toast('❌ Tu planeta aún no tiene tienda. Funda una en el Mercado.');
+
+  const btn = $('btnWandPub');
+  if (btn) btn.disabled = true;
+
+  const { data, error } = await db.rpc('galaxy_wand_list', {
+    p_user_id: me.id,
+    p_session_hash: SESSION_HASH,
+    p_shop_id: shop.id,
+    p_currency: currency,
+    p_unit_price: price
+  });
+
+  if (btn) btn.disabled = false;
+
+  if (error || !data || !data.success) {
+    return toast('❌ ' + (data ? data.msg : (error ? error.message : 'Error al publicar')));
+  }
+
+  toast('🪄 ' + data.msg);
+  $('modalWand').hidden = true;
+  activeWandId = null;
+  await loadWands();
+  loadInventory();
+}
+
+async function sellItem(id){
+  const { data, error } = await db.rpc('galaxy_personal_inventory_sell', {
+    p_user_id: me.id,
+    p_item_id: id
+  });
+  if (error || !data || !data.success) return toast('❌ ' + (data ? data.msg : 'Error al vender'));
+  toast('💰 ' + data.msg);
+  await refresh();
+  loadInventory();
+}
+
+async function transferItem(id){
+  const { data, error } = await db.rpc('galaxy_personal_inventory_transfer', {
+    p_user_id: me.id,
+    p_item_id: id
+  });
+  if (error || !data || !data.success) return toast('❌ ' + (data ? data.msg : 'Error al transferir'));
+  toast('📦 ' + data.msg);
+  loadInventory();
+}
+</script>
+</body>
+</html>

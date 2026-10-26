@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tienda Planetaria // GalaxyGens</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<link rel="preload" as="image" href="lobby.webp" type="image/webp" fetchpriority="high">
+<link rel="stylesheet" href="galaxy.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+.shop-hero {
+  width: 100%;
+  border-radius: 8px;
+  padding: 28px 20px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 22px;
+  box-shadow: 0 0 35px rgba(0,0,0,0.8);
+  border: 2px solid var(--theme-accent, #00f2fe);
+}
+.shop-hero h1 {
+  font-size: clamp(14px, 4vw, 22px);
+  color: var(--theme-accent, #00f2fe);
+  text-shadow: 2px 2px #000, 0 0 15px var(--theme-accent, #00f2fe);
+  margin: 0 0 10px;
+}
+.shop-hero p {
+  color: #e8eeff;
+  font-size: 12px;
+  max-width: 600px;
+  margin: 0 auto;
+  text-shadow: 1px 1px 2px #000;
+}
+.top-action-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  width: 100%;
+  margin-bottom: 16px;
+}
+.chest-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 14px;
+  width: 100%;
+}
+.dispenser-chest {
+  background: rgba(14, 19, 41, 0.95);
+  border: 2px solid var(--p2);
+  border-radius: 6px;
+  padding: 16px 14px;
+  text-align: center;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: transform .1s ease, border-color .15s ease;
+}
+.dispenser-chest:hover {
+  border-color: var(--theme-accent, #00f2fe);
+}
+.dispenser-chest.empty {
+  opacity: 0.65;
+  border-color: #475569;
+  filter: grayscale(0.5);
+}
+.dispenser-spr {
+  font-size: 38px;
+  margin: 4px 0 8px;
+}
+.stock-pill {
+  font: 8.5px 'Press Start 2P', monospace;
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin-bottom: 8px;
+  display: inline-block;
+}
+.stock-on { background: rgba(61,220,151,0.15); color: var(--ok); border: 1px solid var(--ok); }
+.stock-empty { background: rgba(255,107,139,0.15); color: var(--bad); border: 1px solid var(--bad); }
+
+.price-box {
+  background: #060919;
+  border: 1px solid var(--p2);
+  border-radius: 6px;
+  padding: 8px;
+  margin: 8px 0 12px;
+  text-align: center;
+}
+.unit-price-line {
+  font-size: 10px;
+  color: var(--m);
+  margin-bottom: 4px;
+}
+.total-price-line {
+  font: 9.5px 'Press Start 2P', monospace;
+}
+.c-credits { color: var(--gold); }
+.c-plasma { color: var(--plasma); }
+.c-supernova { color: #fff; }
+.stock-callout {
+  background: #090f24;
+  border: 1px solid var(--g);
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  margin: 8px 0 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+</style>
+</head>
+<body>
+<script src="galaxy.js"></script>
+<script>
+let SHOP = null;
+const shopId = new URLSearchParams(window.location.search).get('id');
+
+const BG_PRESETS = {
+  preset_space: 'linear-gradient(rgba(5,7,19,.85), rgba(5,7,19,.95)), url("lobby.webp") center/cover',
+  preset_nebula: 'linear-gradient(135deg, #090a1f, #1e1b4b, #030712)',
+  preset_magma: 'linear-gradient(135deg, #2b0505, #450a0a, #030712)',
+  preset_cyber: 'linear-gradient(135deg, #022018, #064e3b, #030712)',
+  preset_void: 'linear-gradient(135deg, #020617, #000000)'
+};
+
+startPage({active:'mercado.html', needPlanet:true}).then(() => {
+  if (!shopId) { toast('ID de tienda inválido'); setTimeout(() => location.href='mercado.html', 1000); return; }
+  loadShop();
+  setInterval(loadShop, 6000);
+});
+
+$('view').innerHTML = `<div id="shopContainer" style="width:100%">Cargando tienda...</div>
+
+  <!-- Modal Comprar Cantidad Personalizada -->
+  <div class="modal" id="modalBuy" hidden onclick="if(event.target===this)this.hidden=true">
+    <div class="modal-box" style="max-width:400px">
+      <h3 class="px" style="color:var(--gold);margin-bottom:8px">🛍️ COMPRAR MINERAL</h3>
+      <p style="font-size:11px;color:var(--m)" id="buyModalDesc"></p>
+      
+      <div class="stock-callout">
+        <span>Disponible en cofre:</span>
+        <b style="color:var(--gold)" id="buyAvailableQty">0</b>
+      </div>
+
+      <label class="px" style="font-size:9px;color:var(--g);display:block;margin:8px 0 4px">Cantidad que deseas llevarte:</label>
+      <div style="display:flex;gap:6px">
+        <input type="number" id="buyQtyInput" class="input" min="1" value="1" oninput="updateBuyPriceCalc()">
+        <button class="btn alt sm" style="white-space:nowrap" onclick="setBuyMax()">Comprar Todo</button>
+      </div>
+
+      <div class="price-box" style="margin:12px 0">
+        <div class="unit-price-line">Precio por unidad: <b id="buyModalUnitPrice">0</b></div>
+        <div class="total-price-line">Total a pagar: <b id="buyModalTotalPrice" style="color:var(--gold)">0</b></div>
+      </div>
+
+      <button class="btn ok" id="btnConfirmBuy" onclick="submitBuyChest()">Confirmar Compra</button>
+      <button class="btn alt" style="margin-top:8px" onclick="$('modalBuy').hidden=true">Cancelar</button>
+    </div>
+  </div>
+
+  <!-- Modal Publicar Cofre -->
+  <div class="modal" id="modalPublish" hidden onclick="if(event.target===this)this.hidden=true">
+    <div class="modal-box" style="max-width:460px">
+      <h3 class="px" style="color:var(--gold);margin-bottom:8px">📦 PUBLICAR COFRE EN LA TIENDA</h3>
+      <p style="font-size:11px;color:var(--m);line-height:1.5">
+        Selecciona un mineral de tu almacén para ponerlo a la venta en este cofre dispensador.
+      </p>
+
+      <label class="px" style="font-size:9px;color:var(--g);display:block;margin:10px 0 4px">Tipo de Mercancía:</label>
+      <select class="input" id="pubCategory" disabled>
+        <option value="generator">⚛️ Ítems de Generadores (Almacén)</option>
+      </select>
+
+      <label class="px" style="font-size:9px;color:var(--g);display:block;margin:8px 0 4px">Mineral a Vender:</label>
+      <select class="input" id="pubItem" onchange="onItemSelectChange()"></select>
+
+      <div class="stock-callout" id="stockBox">
+        <span>Disponible en tu almacén:</span>
+        <b style="color:var(--gold)" id="stockCountLbl">0</b>
+      </div>
+
+      <div class="two">
+        <div>
+          <label class="px" style="font-size:9px;color:var(--g);display:block;margin:6px 0 4px">Cantidad a meter:</label>
+          <input type="number" id="pubQty" class="input" min="1" value="1" oninput="calcTotalPreview()">
+        </div>
+        <div>
+          <label class="px" style="font-size:9px;color:var(--g);display:block;margin:6px 0 4px">Moneda de Cobro:</label>
+          <select class="input" id="pubCurrency" onchange="calcTotalPreview()">
+            <option value="credits">💰 Créditos (CR)</option>
+            <option value="plasma">🔮 Plasma (PL)</option>
+            <option value="supernova">💥 Supernova (NS)</option>
+          </select>
+        </div>
+      </div>
+
+      <label class="px" style="font-size:9px;color:var(--g);display:block;margin:6px 0 4px">Precio por CADA unidad:</label>
+      <input type="number" id="pubUnitPrice" class="input" min="0.1" step="any" placeholder="ej. 50" oninput="calcTotalPreview()">
+
+      <div class="price-box" style="margin:10px 0">
+        <div class="unit-price-line">Precio: 1 unidad = <b id="lblUnit">0</b></div>
+        <div class="total-price-line">Total del lote: <b id="lblTotal" style="color:var(--gold)">0</b></div>
+      </div>
+
+      <button class="btn ok" style="margin-top:6px" id="btnPublishSubmit" onclick="submitPublish()">Publicar Cofre</button>
+      <button class="btn alt" style="margin-top:8px" onclick="$('modalPublish').hidden=true">Cancelar</button>
+    </div>
+  </div>
+
+  <!-- Modal Rellenar Cofre -->
+  <div class="modal" id="modalRefill" hidden onclick="if(event.target===this)this.hidden=true">
+    <div class="modal-box" style="max-width:380px">
+      <h3 class="px" style="color:var(--ok);margin-bottom:8px">📥 RELLENAR COFRE</h3>
+      <p style="font-size:11px;color:var(--m)" id="refillDesc"></p>
+      <label class="px" style="font-size:9px;color:var(--g);display:block;margin:8px 0 4px">Cantidad a Añadir:</label>
+      <input type="number" id="refillQty" class="input" min="1" value="10">
+      <button class="btn ok" style="margin-top:10px" id="btnSubmitRefill">Rellenar Stock</button>
+      <button class="btn alt" style="margin-top:8px" onclick="$('modalRefill').hidden=true">Cerrar</button>
+    </div>
+  </div>
+
+  <!-- Modal Personalizador -->
+  <div class="modal" id="modalEdit" hidden onclick="if(event.target===this)this.hidden=true">
+    <div class="modal-box" style="max-width:480px">
+      <h3 class="px" style="color:var(--g);margin-bottom:10px">🎨 PERSONALIZAR TIENDA</h3>
+      <label class="px" style="font-size:9px;color:var(--m);display:block;margin:8px 0 4px">Nombre de la Tienda:</label>
+      <input class="input" id="editName" maxlength="30">
+      
+      <label class="px" style="font-size:9px;color:var(--m);display:block;margin:8px 0 4px">Lema / Mensaje:</label>
+      <input class="input" id="editSlogan" maxlength="60">
+
+      <label class="px" style="font-size:9px;color:var(--m);display:block;margin:8px 0 4px">Color de Acento:</label>
+      <input type="color" id="editColor" class="input" style="height:42px;padding:4px;cursor:pointer">
+
+      <label class="px" style="font-size:9px;color:var(--m);display:block;margin:8px 0 4px">Fondo Temático:</label>
+      <select class="input" id="editBg">
+        <option value="preset_space">🌌 Espacio Profundo</option>
+        <option value="preset_nebula">🔮 Nebulosa Índigo</option>
+        <option value="preset_magma">🌋 Volcánico Magma</option>
+        <option value="preset_cyber">📟 Cyber Esmeralda</option>
+        <option value="preset_void">🕳️ Vacío Absoluto</option>
+      </select>
+
+      <button class="btn ok" style="margin-top:14px" onclick="submitEdit()">Guardar Cambios</button>
+      <button class="btn alt" style="margin-top:8px" onclick="$('modalEdit').hidden=true">Cerrar</button>
+    </div>
+  </div>`;
+
+async function loadShop(){
+  if (document.hidden) return;
+  try {
+    const [pageRes, wandRes] = await Promise.all([
+      db.rpc('galaxy_shop_get_page', { p_user_id: me.id, p_shop_id: shopId }),
+      db.rpc('galaxy_wand_shop_listings', { p_user_id: me.id, p_session_hash: SESSION_HASH, p_shop_id: shopId })
+    ]);
+
+    const data = pageRes.data;
+    if (!data || !data.success) { toast('Error cargando tienda'); return; }
+
+    const baseChests = Array.isArray(data.chests) ? data.chests : [];
+    const wandChests = (wandRes.data && wandRes.data.success && Array.isArray(wandRes.data.listings))
+      ? wandRes.data.listings
+      : [];
+
+    const seen = new Set();
+    const merged = [...baseChests, ...wandChests].filter(ch => {
+      if (!ch || !ch.id || seen.has(ch.id)) return false;
+      seen.add(ch.id);
+      return true;
+    });
+
+    // Si galaxy_shop_get_page ya incluye las varitas, no las contamos dos veces.
+    const baseIds = new Set(baseChests.map(ch => ch.id));
+    const wandAlreadyInBase = wandChests.some(ch => baseIds.has(ch.id));
+    const extraWandSlots = wandAlreadyInBase ? 0 : wandChests.filter(ch => ch.is_mine).length;
+
+    SHOP = {
+      ...data,
+      chests: merged,
+      my_slots_used: Number(data.my_slots_used || 0) + extraWandSlots
+    };
+    renderShopView();
+  } catch(e) {
+    console.error('Error:', e);
+  }
+}
+
+function renderShopView(){
+  const s = SHOP.shop;
+  const chests = SHOP.chests || [];
+
+  document.documentElement.style.setProperty('--theme-accent', s.theme_color || '#00f2fe');
+
+  $('shopContainer').innerHTML = `
+    <div class="top-action-bar">
+      <a href="mercado.html" class="btn alt sm">← Volver al Mercado</a>
+      <div style="font:9px 'Press Start 2P', monospace;color:var(--gold)">
+        Espacios: ${SHOP.my_slots_used} / ${SHOP.my_slots_max}
+      </div>
+      <div style="display:flex;gap:8px">
+        ${SHOP.is_member ? `
+          <button class="btn alt sm" onclick="openEditModal()">🎨 Personalizar</button>
+          <button class="btn ok sm" onclick="openPublishModal()">+ Publicar Cofre</button>
+        ` : ''}
+      </div>
+    </div>
+
+    <div class="shop-hero" style="${BG_PRESETS[s.bg_style] || BG_PRESETS.preset_space}">
+      <h1 class="px">${esc(s.name)}</h1>
+      <p>${esc(s.slogan)}</p>
+      <div style="font:8.5px 'Press Start 2P', monospace;color:var(--m);margin-top:12px">
+        🪐 COLONIA PLANETARIA: <b style="color:#fff">${esc(SHOP.planet_name)}</b>
+      </div>
+    </div>
+
+    <h3 class="px" style="font-size:11px;color:var(--gold);margin:0 0 14px">
+      📦 COFRES Y VARITAS (${chests.length})
+    </h3>
+
+    ${chests.length ? `
+      <div class="chest-grid">
+        ${chests.map(ch => {
+          const isWand = ch.item_type === 'wand';
+          const isEmpty = Number(ch.quantity) <= 0;
+          const curSym = ch.price_currency === 'credits' ? 'CR' : (ch.price_currency === 'plasma' ? 'PL' : 'NS');
+          const icon = isEmpty ? '🔒' : (isWand ? '🪄' : '🎁');
+          const itemIcon = isWand ? '🪄' : (ch.item_rarity === 'rare' ? '✨' : '🪨');
+          return `
+            <div class="dispenser-chest ${isEmpty ? 'empty' : ''}">
+              <div>
+                <div class="dispenser-spr">${icon}</div>
+                <h4 class="px" style="font-size:9.5px;color:#fff;margin:0 0 6px">
+                  ${itemIcon} ${esc(ch.item_name)}
+                </h4>
+                <div class="stock-pill ${isEmpty ? 'stock-empty' : 'stock-on'}">
+                  ${isEmpty ? '🔒 AGOTADO' : `STOCK: x${fmt(ch.quantity)}`}
+                </div>
+                <div style="font-size:9px;color:var(--m);margin-bottom:6px">
+                  Vendedor: <b>${ch.is_mine ? 'TÚ' : esc(ch.seller_name)}</b>
+                </div>
+                ${isWand ? '<div style="font-size:9px;color:var(--gold);margin-bottom:6px">Desbloquea x1 permanente</div>' : ''}
+              </div>
+
+              <div>
+                <div class="price-box">
+                  <div class="unit-price-line">
+                    1 unidad = <b class="c-${ch.price_currency}">${fmt(ch.unit_price)} ${curSym}</b>
+                  </div>
+                  <div class="total-price-line c-${ch.price_currency}">
+                    Lote total: ${fmt(ch.price_amount)} ${curSym}
+                  </div>
+                </div>
+
+                ${ch.is_mine ? (isWand ? `
+                  <button class="btn bad sm" style="width:100%" onclick="cancelChest('${ch.id}')">
+                    ✕ Retirar Varita
+                  </button>
+                ` : `
+                  <div style="display:flex;gap:6px">
+                    <button class="btn ok sm" style="flex:1" onclick="openRefillModal('${ch.id}', '${esc(ch.item_name)}')">
+                      📥 Rellenar
+                    </button>
+                    <button class="btn bad sm" style="flex:1" onclick="cancelChest('${ch.id}')">
+                      ✕ Retirar
+                    </button>
+                  </div>
+                `) : `
+                  <button class="btn ok sm" style="width:100%" ${isEmpty ? 'disabled' : ''} onclick="openBuyModal('${ch.id}')">
+                    ${isEmpty ? 'Agotado' : (isWand ? 'Comprar Varita' : 'Comprar Mineral')}
+                  </button>
+                `}
+              </div>
+            </div>`;
+        }).join('')}
+      </div>` 
+      : '<p style="color:var(--m);text-align:center;padding:20px">No hay cofres ni varitas a la venta en este momento.</p>'
+    }`;
+}
+
+function openEditModal(){
+  const s = SHOP.shop;
+  $('editName').value = s.name;
+  $('editSlogan').value = s.slogan;
+  $('editColor').value = s.theme_color;
+  $('editBg').value = s.bg_style || 'preset_space';
+  $('modalEdit').hidden = false;
+}
+
+async function submitEdit(){
+  const { data, error } = await db.rpc('galaxy_shop_save', {
+    p_user_id: me.id,
+    p_name: $('editName').value.trim(),
+    p_slogan: $('editSlogan').value.trim(),
+    p_theme_color: $('editColor').value,
+    p_banner_url: $('editBg').value
+  });
+  if (error || !data || !data.success) return toast('❌ ' + (data ? data.msg : 'Error'));
+  toast('🎨 ¡Tienda actualizada!');
+  $('modalEdit').hidden = true;
+  loadShop();
+}
+
+function openPublishModal(){
+  if (SHOP.my_slots_used >= SHOP.my_slots_max) {
+    return toast(`⚠️ No tienes espacios de mercado disponibles (${SHOP.my_slots_used}/${SHOP.my_slots_max})`);
+  }
+  const stock = SHOP.available_stock || [];
+  const pItem = $('pubItem');
+
+  if (!stock.length) {
+    pItem.innerHTML = `<option value="">⚠️ No hay minerales en el almacén</option>`;
+    $('stockCountLbl').textContent = '0';
+    $('btnPublishSubmit').disabled = true;
+  } else {
+    pItem.innerHTML = stock.map(s => `
+      <option value="${s.item_key}" data-qty="${s.qty}">
+        ${s.rarity==='rare'?'✨':'🪨'} ${s.item_name} (Stock: ${fmt(s.qty)})
+      </option>`).join('');
+    $('btnPublishSubmit').disabled = false;
+    onItemSelectChange();
+  }
+
+  calcTotalPreview();
+  $('modalPublish').hidden = false;
+}
+
+function onItemSelectChange(){
+  const sel = $('pubItem');
+  const opt = sel.options[sel.selectedIndex];
+  if (!opt) return;
+  const maxQty = parseInt(opt.dataset.qty || 0, 10);
+  $('stockCountLbl').textContent = fmt(maxQty) + ' unidades';
+  $('pubQty').max = maxQty;
+  if (parseInt($('pubQty').value, 10) > maxQty) {
+    $('pubQty').value = maxQty;
+  }
+  calcTotalPreview();
+}
+
+function calcTotalPreview(){
+  const qty = Math.max(1, parseInt($('pubQty').value || 1, 10));
+  const unitPr = Math.max(0, parseFloat($('pubUnitPrice').value || 0));
+  const cur = $('pubCurrency').value;
+  const curSym = cur === 'credits' ? 'CR' : (cur === 'plasma' ? 'PL' : 'NS');
+
+  $('lblUnit').textContent = `${fmt(unitPr)} ${curSym}`;
+  $('lblTotal').textContent = `${fmt(qty * unitPr)} ${curSym}`;
+}
+
+async function submitPublish(){
+  const itemKey = $('pubItem').value;
+  const qty = parseInt($('pubQty').value, 10);
+  const cur = $('pubCurrency').value;
+  const unitPr = parseFloat($('pubUnitPrice').value);
+
+  if (!itemKey) return toast('No seleccionaste ningún mineral');
+  if (!qty || qty <= 0 || !unitPr || unitPr <= 0) return toast('Ingresa cantidad y precio válidos');
+
+  const { data, error } = await db.rpc('galaxy_shop_create_chest', {
+    p_user_id: me.id,
+    p_shop_id: shopId,
+    p_source: 'warehouse',
+    p_item_key: itemKey,
+    p_qty: qty,
+    p_currency: cur,
+    p_unit_price: unitPr
+  });
+
+  if (error || !data || !data.success) return toast('❌ ' + (data ? data.msg : 'Error'));
+  toast('🎁 ' + data.msg);
+  $('modalPublish').hidden = true;
+  loadShop();
+}
+
+let activeRefillId = null;
+function openRefillModal(id, name){
+  activeRefillId = id;
+  $('refillDesc').textContent = `Añadir más unidades desde tu almacén a tu cofre de ${name}`;
+  $('btnSubmitRefill').onclick = submitRefill;
+  $('modalRefill').hidden = false;
+}
+
+async function submitRefill(){
+  const q = parseInt($('refillQty').value, 10);
+  if (!q || q <= 0) return toast('Cantidad inválida');
+
+  const { data, error } = await db.rpc('galaxy_shop_refill_chest', {
+    p_user_id: me.id,
+    p_listing_id: activeRefillId,
+    p_add_qty: q
+  });
+
+  if (error || !data || !data.success) return toast('❌ ' + (data ? data.msg : 'Error'));
+  toast('✅ ' + data.msg);
+  $('modalRefill').hidden = true;
+  loadShop();
+}
+
+async function cancelChest(id){
+  const ch = (SHOP.chests || []).find(x => x.id === id);
+  const isWand = ch && ch.item_type === 'wand';
+  const msg = isWand
+    ? '¿Retirar esta varita? Volverá a tu inventario personal y el desbloqueo x1 se mantiene.'
+    : '¿Retirar este cofre? El stock volverá al almacén y recuperarás tu espacio.';
+  if (!confirm(msg)) return;
+
+  const rpcName = isWand ? 'galaxy_wand_cancel' : 'galaxy_shop_cancel_chest';
+  const params = isWand
+    ? { p_user_id: me.id, p_session_hash: SESSION_HASH, p_listing_id: id }
+    : { p_user_id: me.id, p_listing_id: id };
+
+  const { data, error } = await db.rpc(rpcName, params);
+  if (error || !data || !data.success) return toast('❌ ' + (data ? data.msg : 'Error'));
+  toast('✅ ' + data.msg);
+  loadShop();
+  if (isWand) syncWandStatus();
+}
+
+// Modal de compra
+let activeBuyChest = null;
+function openBuyModal(id){
+  const ch = (SHOP.chests || []).find(x => x.id === id);
+  if (!ch || Number(ch.quantity) <= 0) return toast('Publicación agotada');
+  activeBuyChest = ch;
+
+  const isWand = ch.item_type === 'wand';
+  $('buyModalDesc').textContent = isWand
+    ? `🪄 ${ch.item_name} · Vendedor: ${ch.seller_name}`
+    : `${ch.item_rarity==='rare'?'✨':'🪨'} ${ch.item_name} · Vendedor: ${ch.seller_name}`;
+  $('buyAvailableQty').textContent = fmt(isWand ? 1 : ch.quantity) + ' unidad' + (isWand || Number(ch.quantity) === 1 ? '' : 'es');
+  
+  const inp = $('buyQtyInput');
+  inp.max = isWand ? 1 : ch.quantity;
+  inp.value = 1;
+  inp.disabled = isWand;
+
+  const curSym = ch.price_currency === 'credits' ? 'CR' : (ch.price_currency === 'plasma' ? 'PL' : 'NS');
+  $('buyModalUnitPrice').textContent = `${fmt(ch.unit_price)} ${curSym}`;
+  updateBuyPriceCalc();
+
+  $('modalBuy').hidden = false;
+}
+
+function setBuyMax(){
+  if (!activeBuyChest) return;
+  $('buyQtyInput').value = activeBuyChest.item_type === 'wand' ? 1 : activeBuyChest.quantity;
+  updateBuyPriceCalc();
+}
+
+function updateBuyPriceCalc(){
+  if (!activeBuyChest) return;
+  const max = activeBuyChest.item_type === 'wand' ? 1 : Number(activeBuyChest.quantity || 1);
+  let val = parseInt($('buyQtyInput').value || 1, 10);
+  if (val > max) val = max;
+  if (val < 1) val = 1;
+  $('buyQtyInput').value = val;
+
+  const curSym = activeBuyChest.price_currency === 'credits' ? 'CR' : (activeBuyChest.price_currency === 'plasma' ? 'PL' : 'NS');
+  const total = val * Number(activeBuyChest.unit_price || 0);
+  $('buyModalTotalPrice').textContent = `${fmt(total)} ${curSym}`;
+}
+
+async function submitBuyChest(){
+  if (!activeBuyChest) return;
+  const isWand = activeBuyChest.item_type === 'wand';
+  const qty = isWand ? 1 : parseInt($('buyQtyInput').value, 10);
+  if (!qty || qty <= 0) return toast('Cantidad inválida');
+
+  const btn = $('btnConfirmBuy');
+  btn.disabled = true;
+  btn.textContent = 'Procesando...';
+
+  try {
+    const rpcName = isWand ? 'galaxy_wand_buy' : 'galaxy_shop_buy_chest';
+    const params = isWand
+      ? { p_user_id: me.id, p_session_hash: SESSION_HASH, p_listing_id: activeBuyChest.id }
+      : { p_user_id: me.id, p_listing_id: activeBuyChest.id, p_buy_qty: Number(qty) };
+
+    const { data, error } = await db.rpc(rpcName, params);
+
+    btn.disabled = false;
+    btn.textContent = 'Confirmar Compra';
+
+    if (error) {
+      console.error('Error detallado de compra:', error);
+      return toast('❌ ' + (error.message || 'Error en la transacción'));
+    }
+
+    if (!data || !data.success) {
+      return toast('❌ ' + (data ? data.msg : 'No se pudo completar'));
+    }
+
+    toast((isWand ? '🪄 ' : '🛍️ ') + data.msg);
+    $('modalBuy').hidden = true;
+    await refresh();
+    if (isWand) syncWandStatus();
+    loadShop();
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = 'Confirmar Compra';
+    console.error('Excepción al comprar:', err);
+    toast('❌ Error de conexión al comprar');
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Granja Lunar // GalaxyGens</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<link rel="preload" as="image" href="lobby.webp" type="image/webp" fetchpriority="high">
+<link rel="stylesheet" href="galaxy.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+.rebirth-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10px;
+  margin: 10px 0;
+}
+.rebirth-table th {
+  font: 8px 'Press Start 2P', monospace;
+  color: var(--g);
+  padding: 6px;
+  border-bottom: 2px solid var(--p2);
+  text-align: left;
+}
+.rebirth-table td {
+  padding: 6px;
+  border-bottom: 1px solid #142040;
+}
+.rb-active-row {
+  background: rgba(255, 210, 63, 0.15);
+  font-weight: bold;
+}
+</style>
+</head>
+<body>
+<script src="galaxy.js"></script>
+<script>
+let FARM = null, timers = [], pending = new Set(), sendTimer = null, down = false, last = null, fullToast = 0;
+const KEYS = [['comun','Común','#94a3b8'],['basico','Básica','#10b981'],['especial','Especial','#3b82f6']];
+
+const REBIRTH_REQUIREMENTS = [
+  { lv:1, pl:10000, cr:3000, pr:2, pct:1 },
+  { lv:2, pl:10000000, cr:6000000, pr:4, pct:2 },
+  { lv:3, pl:22000000, cr:10000000, pr:6, pct:3 },
+  { lv:4, pl:30000000, cr:17000000, pr:8, pct:4 },
+  { lv:5, pl:40000000, cr:20000000, pr:10, pct:5 },
+  { lv:6, pl:55000000, cr:30000000, pr:12, pct:6 },
+  { lv:7, pl:66000000, cr:35000000, pr:14, pct:7 },
+  { lv:8, pl:77000000, cr:40000000, pr:16, pct:8 },
+  { lv:9, pl:88000000, cr:45000000, pr:18, pct:9 },
+  { lv:10, pl:100000000, cr:50000000, pr:20, pct:10 },
+  { lv:11, pl:6500000000, cr:82000000, pr:22, pct:11 },
+  { lv:12, pl:13500000000, cr:114000000, pr:24, pct:12 },
+  { lv:13, pl:20000000000, cr:146000000, pr:26, pct:13 },
+  { lv:14, pl:26000000000, cr:179000000, pr:28, pct:14 },
+  { lv:15, pl:33500000000, cr:211000000, pr:30, pct:15 },
+  { lv:16, pl:40000000000, cr:243000000, pr:32, pct:16 },
+  { lv:17, pl:46500000000, cr:275000000, pr:34, pct:17 },
+  { lv:18, pl:53500000000, cr:307000000, pr:36, pct:18 },
+  { lv:19, pl:60000000000, cr:340000000, pr:38, pct:19 },
+  { lv:20, pl:66500000000, cr:371000000, pr:40, pct:20 }
+];
+
+const UP = {
+  xp_seeker:{ ico:'🧬', name:'Buscador de XP',     desc: f => `+${((f.xp_seeker_level || 0) * 0.35).toFixed(2)} XP extra por cultivo (${(f.xp_per_harvest || 2).toFixed(2)} XP total)` },
+  fortune:  { ico:'🍀', name:'Fortuna',            desc: f => `Hongo: ${f.hongo_value} CR · Cristal: ${f.cristal_value} CR` },
+  plasma:   { ico:'🔮', name:'Búsqueda de Plasma', desc: f => `+${f.plasma_base} PL base por cultivo (+20% chance crítico x5)` },
+  keys:     { ico:'🗝️', name:'Buscador de Llaves', desc: f => f.prestiges < 1 
+              ? '<span style="color:var(--bad)">🔒 Requiere tener Prestigio 1</span>' 
+              : `Llave: ${f.key_chance_pct}% por cultivo<br><small>Común (65%) · Básica (25%) · Especial (10%)</small>` },
+  tnt:      { ico:'🧨', name:'TNT de Cosecha',     desc: f => f.prestiges < 1 
+              ? '<span style="color:var(--bad)">🔒 Requiere tener Prestigio 1</span>' 
+              : `Chance: ${(f.tnt_chance_pct || 0).toFixed(3)}% de detonar y cosechar parcelas adyacentes` },
+  trueno:   { ico:'⚡', name:'Ira del Trueno',     desc: f => f.farm_level < 75 
+              ? '<span style="color:var(--bad)">🔒 Requiere Azada a Nivel 75</span>' 
+              : `Chance: ${(f.trueno_chance_pct || 0).toFixed(3)}% de rayo fulminante con x1.5 XP y x2 PL` },
+  autosell: { ico:'💱', name:'Auto-Venta',         desc: f => f.autosell ? 'ACTIVA: venta instantánea' : 'Venta automática sin límite de cesta' },
+  cap:      { ico:'🎒', name:'Capacidad de Cesta', desc: f => `Capacidad: ${f.capacity} ítems` }
+};
+
+startPage({active:'granja.html', needPlanet:true}).then(() => { 
+  buildGrid(); 
+  sync(); 
+  setInterval(sync, 6000); 
+  setInterval(tickTimers, 250); 
+  setupSwipe(); 
+});
+
+$('view').innerHTML = `
+  <div class="farm-header">
+    <h2 class="sec-title px" style="margin:0">🌱 GRANJA LUNAR</h2>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn alt sm" onclick="openUpgrades()">⚙️ Mejoras</button>
+      <button class="btn sm" onclick="openPrestige()" style="background:#8b5cf6;color:#fff">✨ Prestigio</button>
+      <button class="btn sm" onclick="openRebirth()" style="background:#ec4899;color:#fff">🔄 Renacer</button>
+      <button class="btn ok sm" id="btnSell" onclick="sellHarvest()">💰 Vender</button>
+    </div>
+  </div>
+
+  <div class="farm-stats-bar">
+    <div class="xp-wrapper">
+      <div class="bar-meta">
+        <span style="color:var(--g)">⛏️ NIVEL DEL PICO: <b id="txtLevel">1</b></span>
+        <span style="color:var(--m)"><span id="txtXpCur">0</span> / <span id="txtXpNeed">50</span> XP</span>
+      </div>
+      <div class="progress-track"><div class="progress-fill xp" id="fillXp" style="width:0%"></div></div>
+    </div>
+    <div class="cap-wrapper" id="capBox">
+      <div class="bar-meta"><span style="color:var(--gold)">CESTA / INVENTARIO:</span><span id="txtCap" style="color:#fff">0 / 50</span></div>
+      <div class="progress-track"><div class="progress-fill cap" id="fillCap" style="width:0%"></div></div>
+    </div>
+  </div>
+
+  <div class="notice" id="warnFull" style="margin:0 0 10px;font-size:9px;display:none;background:rgba(255,107,139,.15);border-color:var(--bad);color:var(--bad)">
+    ⚠️ <b>¡CESTA LLENA!</b> Vende tu cosecha o compra <b>Auto-Venta</b> para seguir recolectando.</div>
+
+  <div class="keys-strip" id="keysStrip"></div>
+  <div class="farm-grid" id="plotGrid"></div>
+  <div class="gain-line" id="gainLine">Desliza el cursor sobre las parcelas listas 🍄</div>
+
+  <div class="box" id="invBox" style="text-align:left;padding:14px">
+    <h3 class="px" style="font-size:10px;color:var(--g);margin:0 0 10px">🎒 CESTA DE COSECHA</h3>
+    <div id="farmInv" style="font-size:12px;color:var(--m)"></div>
+  </div>
+
+  <!-- Modal Mejoras -->
+  <div class="modal" id="modalUp" hidden onclick="if(event.target===this)this.hidden=true">
+    <div class="modal-box" style="max-width:540px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <h3 class="px" style="margin:0;color:var(--gold)">🛠️ MEJORAS (EN PLASMA)</h3>
+        <button class="btn-exit" onclick="$('modalUp').hidden=true">✕</button></div>
+      <div class="upgrades-list" id="upList"></div>
+      <button class="btn alt" onclick="$('modalUp').hidden=true">Cerrar</button>
+    </div>
+  </div>
+
+  <!-- Modal Prestigio Infinito -->
+  <div class="modal" id="modalPr" hidden onclick="if(event.target===this)this.hidden=true">
+    <div class="modal-box">
+      <h3 class="px" style="color:#a78bfa;margin-bottom:10px">✨ PRESTIGIOS INFINITOS</h3>
+      <p style="font-size:11.5px;color:var(--m);line-height:1.6">
+        Los prestigios son <b>ilimitados</b> y van subiendo su requerimiento de <b>25 en 25 niveles</b>. Cada prestigio suma <b>+0.0005%</b> permanente a todas las ganancias.
+      </p>
+      <div class="line"><span>Prestigios acumulados</span><b id="prCount" style="color:var(--gold)">0</b></div>
+      <div class="line"><span>Bonus acumulado</span><b id="prBonus" style="color:var(--ok)">+0%</b></div>
+      <div class="line"><span>Nivel actual del pico</span><b id="prHoeCur" style="color:var(--g)">Nv.1</b></div>
+      <div class="line"><span>Nivel requerido siguiente</span><b id="prHoeReq" style="color:var(--bad)">Nv.25</b></div>
+      <div class="notice" style="font-size:9.5px">💡 Al prestigiar se reinicia solo tu nivel de pico a Nv.1. Conservas tus mejoras.</div>
+      <button class="btn" id="btnDoPrestige" style="margin-top:14px;background:#8b5cf6;color:#fff" onclick="doPrestige()">Prestigiar Ahora</button>
+      <button class="btn alt" style="margin-top:8px" onclick="$('modalPr').hidden=true">Regresar</button>
+    </div>
+  </div>
+
+  <!-- Modal Renacimiento (Rebirth 1 al 20) -->
+  <div class="modal" id="modalRb" hidden onclick="if(event.target===this)this.hidden=true">
+    <div class="modal-box" style="max-width:520px">
+      <h3 class="px" style="color:#ec4899;margin-bottom:8px">🔄 SISTEMA DE RENACIMIENTO</h3>
+      <p style="font-size:11px;color:var(--m);line-height:1.5">
+        Renacer potencia todos tus encantamientos y ganancias de forma no acumulativa (Nv.1 = +1%, Nv.2 = +2%, ... Nv.20 = +20%).
+      </p>
+      <div class="notice" style="border-color:var(--bad);background:rgba(255,107,139,0.15);color:#fff;font-size:10px;margin:8px 0">
+        ⚠️ <b>REGLA ESTRICTA:</b> Al renacer se descuentan los Créditos solicitados y <b>tu Plasma se reinicia exactamente a 0 PL</b>.
+      </div>
+
+      <div style="max-height:240px;overflow-y:auto;margin:8px 0">
+        <table class="rebirth-table">
+          <tr><th>NV</th><th>PLASMA</th><th>CRÉDITOS</th><th>PRESTIGIO</th><th>BONUS</th></tr>
+          <tbody id="rbRows"></tbody>
+        </table>
+      </div>
+
+      <div class="line" style="margin-top:8px">
+        <span>Renacimiento Actual</span>
+        <b style="color:var(--gold)" id="rbCurrentBadge">Nivel 0 (+0%)</b>
+      </div>
+
+      <button class="btn" id="btnDoRebirth" style="margin-top:12px;background:#ec4899;color:#fff" onclick="doRebirth()">
+        Renacer Ahora
+      </button>
+      <button class="btn alt" style="margin-top:8px" onclick="$('modalRb').hidden=true">Cerrar</button>
+    </div>
+  </div>`;
+
+function buildGrid(){
+  $('plotGrid').innerHTML = Array.from({length:30}, (_, i) =>
+    `<div class="farm-plot" id="plot-${i}" data-idx="${i}"><span class="icon">🌱</span><span class="timer">...</span></div>`).join('');
+}
+
+async function sync(){
+  if (document.hidden) return;
+  const { data } = await db.rpc('galaxy_farm_get', { p_user_id: me.id });
+  if (!data || !data.success) return;
+  applyFarm(data.farm); 
+  applyState(Object.assign({}, state, { user: data.user }));
+}
+
+function applyFarm(f){
+  FARM = f;
+  const now = Date.now();
+  f.plots.forEach((s, i) => { if (!pending.has(i)) timers[i] = now + s * 1000; });
+  renderFarm();
+}
+
+function renderFarm(){
+  const f = FARM;
+  $('txtLevel').textContent = f.farm_level;
+  $('txtXpCur').textContent = fmt(Math.floor(f.xp)); 
+  $('txtXpNeed').textContent = fmt(f.xp_needed);
+  $('fillXp').style.width = Math.min(100, Math.floor(f.xp / f.xp_needed * 100)) + '%';
+
+  $('capBox').style.display = $('invBox').style.display = $('btnSell').style.display = f.autosell ? 'none' : '';
+  if (!f.autosell) {
+    $('txtCap').textContent = `${fmt(f.inv_count)} / ${fmt(f.capacity)}`;
+    const full = f.inv_count >= f.capacity;
+    $('fillCap').style.width = Math.min(100, Math.floor(f.inv_count / f.capacity * 100)) + '%';
+    $('fillCap').className = 'progress-fill cap' + (full ? ' full' : '');
+    $('warnFull').style.display = full ? 'block' : 'none';
+    $('btnSell').textContent = `💰 Vender · +${fmt(f.inventory_total)} CR`;
+    $('btnSell').disabled = f.inventory_total <= 0;
+    $('farmInv').innerHTML = f.inventory.length ? f.inventory.map(i =>
+      `<div class="line"><span>${i.item === 'cristal' ? '💎' : '🍄'} <b>${esc(i.name)}</b> (${i.value} CR c/u)</span><b style="color:var(--gold)">x${fmt(i.qty)}</b></div>`).join('')
+      : 'La cesta está vacía. Desliza el cursor sobre las parcelas listas.';
+  } else {
+    $('warnFull').style.display = 'none';
+  }
+
+  $('keysStrip').innerHTML = KEYS.map(k => `<span class="key-chip" style="border-color:${k[2]};color:${k[2]}">🗝️ ${k[1]} <b>${fmt((f.keys && f.keys[k[0]]) || 0)}</b></span>`).join('');
+  if (!$('modalUp').hidden) renderUpgrades();
+}
+
+function tickTimers(){
+  const now = Date.now();
+  timers.forEach((t, i) => {
+    const el = $('plot-' + i); if (!el) return;
+    const diff = Math.max(0, Math.ceil((t - now) / 1000));
+    if (diff <= 0) { el.className = 'farm-plot ready'; el.firstChild.textContent = '🍄'; el.lastChild.textContent = 'LISTO'; }
+    else { el.className = 'farm-plot growing'; el.firstChild.textContent = '🌱'; el.lastChild.textContent = diff + 's'; }
+  });
+}
+
+function setupSwipe(){
+  const g = $('plotGrid');
+  g.addEventListener('pointerdown', e => { down = true; last = [e.clientX, e.clientY]; hit(e.clientX, e.clientY); });
+  g.addEventListener('pointermove', e => {
+    if (!down) return;
+    const [x0, y0] = last, dx = e.clientX - x0, dy = e.clientY - y0, steps = Math.max(1, Math.ceil(Math.hypot(dx, dy) / 14));
+    for (let s = 1; s <= steps; s++) hit(x0 + dx * s / steps, y0 + dy * s / steps);
+    last = [e.clientX, e.clientY];
+  });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => g.addEventListener(ev, () => { down = false; }));
+}
+
+function hit(x, y){
+  const el = document.elementFromPoint(x, y), p = el && el.closest('.farm-plot');
+  if (p) harvestPlot(+p.dataset.idx, p);
+}
+
+function harvestPlot(i, el){
+  if (!FARM || timers[i] > Date.now() || pending.has(i)) return;
+  if (!FARM.autosell && FARM.inv_count >= FARM.capacity) {
+    if (Date.now() - fullToast > 2000) { fullToast = Date.now(); toast('⚠️ ¡Cesta llena! Vende tu cosecha.'); }
+    return;
+  }
+  timers[i] = Date.now() + 2000;
+  el.className = 'farm-plot swiped'; el.firstChild.textContent = '✨'; el.lastChild.textContent = '⏳';
+  pending.add(i);
+  clearTimeout(sendTimer); sendTimer = setTimeout(sendBatch, 150);
+}
+
+async function sendBatch(){
+  if (!pending.size) return;
+  const list = [...pending]; pending.clear();
+  const { data } = await db.rpc('galaxy_farm_harvest', { p_user_id: me.id, p_plots: list });
+  if (!data || !data.success) return sync();
+  applyFarm(data.farm); applyState(Object.assign({}, state, { user: data.user }));
+  const g = data.gains, parts = [];
+  if (data.harvested) {
+    parts.push(`+${fmt(g.xp)} XP`);
+    if (Number(g.money) > 0) parts.push(`+${fmt(g.money)} CR`);
+    parts.push(`+${fmt(g.plasma)} PL`);
+    KEYS.forEach(k => { if (g.keys[k[0]] > 0) parts.push(`🗝️ ${k[1]} ×${g.keys[k[0]]}`); });
+    if (g.tnt) parts.push('🧨 ¡DETONACIÓN TNT!');
+    if (g.trueno) parts.push('⚡ ¡RAYO FULMINANTE!');
+    $('gainLine').textContent = parts.join(' · ');
+  }
+  if (g.leveled) toast(`⭐ ¡EL PICO SUBIÓ A NIVEL ${data.farm.farm_level}!`);
+}
+
+async function sellHarvest(){
+  const { data } = await db.rpc('galaxy_farm_sell', { p_user_id: me.id });
+  if (!data || !data.success) return toast('❌ ' + (data ? data.msg : 'Error'));
+  toast(`💰 Cosecha vendida: +${fmt(data.total)} CR`);
+  applyFarm(data.farm); applyState(Object.assign({}, state, { user: data.user }));
+}
+
+function openUpgrades(){ renderUpgrades(); $('modalUp').hidden = false; }
+
+function renderUpgrades(){
+  const pl = Number(me.plasma || 0);
+  $('upList').innerHTML = FARM.upgrades.filter(u => !(u.kind === 'cap' && FARM.autosell)).map(u => {
+    const d = UP[u.kind], maxed = u.level >= u.max, locked = !!u.locked;
+    const afford = u.cost !== null && pl >= u.cost && !locked;
+    const many = u.max > 5 && !locked;
+    const lv = u.kind === 'autosell' ? '' : ` (Nv.${fmt(u.level)}${u.max > 1 ? ' / ' + fmt(u.max) : ''})`;
+
+    let btn = '';
+    if (locked) {
+      btn = `<button class="btn sm bad" disabled>BLOQUEADO</button>`;
+    } else if (maxed) {
+      btn = '<button class="btn sm" disabled>MAX</button>';
+    } else if (many) {
+      btn = `<div class="buy-row">${[[1,'x1'],[10,'x10'],[100,'x100'],[0,'MAX']].map(q =>
+            `<button class="btn ok sm" ${afford ? '' : 'disabled'} onclick="buy('${u.kind}',${q[0]})">${q[1]}</button>`).join('')}</div>
+          <div class="cost">Siguiente: ${fmt(u.cost)} PL</div>`;
+    } else {
+      btn = `<button class="btn ok sm" ${afford ? '' : 'disabled'} onclick="buy('${u.kind}',1)">${fmt(u.cost)} PL</button>`;
+    }
+
+    return `<div class="upgrade-item"><div><h4>${d.ico} ${d.name}${lv}</h4><p>${d.desc(FARM)}</p></div><div style="text-align:right">${btn}</div></div>`;
+  }).join('');
+}
+
+async function buy(kind, qty){
+  const { data } = await db.rpc('galaxy_farm_buy', { p_user_id: me.id, p_kind: kind, p_qty: qty });
+  if (!data || !data.success) return toast('❌ ' + (data ? data.msg : 'Error de conexión'));
+  toast(`✅ ${UP[kind].name}: +${data.bought} nivel${data.bought > 1 ? 'es' : ''} (−${fmt(data.spent)} PL)`);
+  applyFarm(data.farm); applyState(Object.assign({}, state, { user: data.user })); renderUpgrades();
+}
+
+function openPrestige(){
+  if (!FARM) return;
+  const req = (FARM.prestiges + 1) * 25;
+  $('prCount').textContent = FARM.prestiges;
+  $('prBonus').textContent = '+' + (FARM.prestiges * 0.0005).toFixed(4) + '%';
+  $('prHoeCur').textContent = 'Nv.' + FARM.farm_level;
+  $('prHoeReq').textContent = 'Nv.' + req;
+  $('btnDoPrestige').disabled = FARM.farm_level < req;
+  $('modalPr').hidden = false;
+}
+
+async function doPrestige(){
+  const { data } = await db.rpc('galaxy_farm_prestige', { p_user_id: me.id });
+  if (!data || !data.success) return toast('❌ ' + (data ? data.msg : 'Error'));
+  toast('✨ ¡PRESTIGIO OBTENIDO! +0.0005% acumulativo a ganancias');
+  applyFarm(data.farm); applyState(Object.assign({}, state, { user: data.user }));
+  openPrestige();
+}
+
+function openRebirth(){
+  if (!FARM) return;
+  const currentRb = FARM.rebirth || 0;
+  $('rbCurrentBadge').textContent = `Nivel ${currentRb} (+${currentRb}% a ganancias)`;
+
+  const nextReq = REBIRTH_REQUIREMENTS.find(r => r.lv === currentRb + 1);
+  const rows = $('rbRows');
+  rows.innerHTML = REBIRTH_REQUIREMENTS.map(r => {
+    const isCurrent = (r.lv === currentRb);
+    return `
+      <tr class="${isCurrent ? 'rb-active-row' : ''}">
+        <td><b>Nv.${r.lv}</b></td>
+        <td style="color:var(--plasma)">${fmt(r.pl)} PL</td>
+        <td style="color:var(--gold)">${fmt(r.cr)} CR</td>
+        <td>Pr.${r.pr}</td>
+        <td style="color:var(--ok)">+${r.pct}%</td>
+      </tr>`;
+  }).join('');
+
+  const btn = $('btnDoRebirth');
+  if (!nextReq) {
+    btn.disabled = true;
+    btn.textContent = 'Renacimiento MAX (20/20)';
+  } else {
+    const can = (FARM.prestiges >= nextReq.pr) && (Number(me.credits) >= nextReq.cr) && (Number(me.plasma) >= nextReq.pl);
+    btn.disabled = !can;
+    btn.textContent = `Renacer a Nivel ${nextReq.lv} (−${fmt(nextReq.cr)} CR · Reset PL a 0)`;
+  }
+
+  $('modalRb').hidden = false;
+}
+
+async function doRebirth(){
+  if (!confirm('⚠️ ¿Seguro que deseas renacer? Se descontarán los créditos requeridos y TU PLASMA SE REINICIARÁ A 0.')) return;
+  const { data, error } = await db.rpc('galaxy_farm_rebirth', { p_user_id: me.id });
+  if (error || !data || !data.success) return toast('❌ ' + (data ? data.msg : 'Error al renacer'));
+  toast('🎉 ' + data.msg);
+  applyFarm(data.farm); 
+  applyState(Object.assign({}, state, { user: data.user }));
+  openRebirth();
+}
+</script>
+</body>
+</html>
